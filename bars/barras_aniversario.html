@@ -669,7 +669,7 @@
                     CURRENT_MODE = newMode;
                     const headerLabel = document.querySelector('#tableHeader .t-equipo');
                     if (headerLabel) {
-                        headerLabel.textContent = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
+                        headerLabel.textContent = '' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
                     }
                     if (typeof CURRENT_SNAPSHOT !== 'undefined' && CURRENT_SNAPSHOT && !renderScheduled) {
                         scheduleRender();
@@ -677,7 +677,7 @@
                 } else {
                     const headerLabel = document.querySelector('#tableHeader .t-equipo');
                     if (headerLabel) {
-                        const expectedText = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
+                        const expectedText = '' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
                         if (headerLabel.textContent !== expectedText) {
                             headerLabel.textContent = expectedText;
                         }
