@@ -661,6 +661,30 @@
                 if (_initMode) { CURRENT_MODE = _initMode; }
             }
 
+            function syncDisplayModeUI() {
+                if (!window.OverlayConfig) return;
+                const cfg = window.OverlayConfig.get();
+                const newMode = cfg.display?.displayMode || 'team';
+                if (newMode !== CURRENT_MODE) {
+                    CURRENT_MODE = newMode;
+                    const headerLabel = document.querySelector('#tableHeader .t-equipo');
+                    if (headerLabel) {
+                        headerLabel.textContent = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
+                    }
+                    if (typeof CURRENT_SNAPSHOT !== 'undefined' && CURRENT_SNAPSHOT && !renderScheduled) {
+                        scheduleRender();
+                    }
+                } else {
+                    const headerLabel = document.querySelector('#tableHeader .t-equipo');
+                    if (headerLabel) {
+                        const expectedText = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
+                        if (headerLabel.textContent !== expectedText) {
+                            headerLabel.textContent = expectedText;
+                        }
+                    }
+                }
+            }
+
             function getTeamDisplayName(team) {
                 if (CURRENT_MODE === "individual") {
                     return team.playerName || "Desconocido";
@@ -701,7 +725,7 @@
 
             let currentPanelIndex = 0;
             let panelStartTime = 0;
-            let lastPanelSize = 0; // para resetear el temporizador al cambiar el número de elementos
+            let lastPanelSize = 0;
 
             const rankToPPP = {
                 1:10, 2:8, 3:6, 4:5, 5:4, 6:3, 7:2, 8:1, 9:1, 10:1
@@ -760,9 +784,6 @@
             }
 
             async function updateFinalContainer(aliveTeams) {
-                // NOTA: No bloqueamos con isTransitioning aquí porque esta función se llama
-                // exclusivamente desde renderFinal, que ya está protegida por processData.
-
                 const container = document.getElementById('finalPlayersContainer');
                 const existingCards = new Map();
                 container.querySelectorAll('.final-player-card').forEach(card => {
@@ -849,9 +870,6 @@
                     updateUtilities(utilitiesDiv, team.utilities);
                     card.classList.toggle('compact', aliveTeams.length === 3);
                 });
-
-                // La condición siguiente siempre es falsa porque ya hemos añadido las cartas al mapa.
-                // Se eliminó el bloque completo para evitar doble RAF y manipulaciones innecesarias.
             }
 
             async function animateTableToFinalTransition(aliveTeams) {
@@ -1082,7 +1100,6 @@
             let _prevTableVisible = null;
 
             function applyVisibility() {
-                // Si estamos animando, reintentamos en el siguiente frame en lugar de ignorar
                 if (isAnimating) {
                     requestAnimationFrame(applyVisibility);
                     return;
@@ -1160,22 +1177,8 @@
 
             function initExternalControl() {
                 if (window.OverlayConfig) {
-                    const storedMode = window.OverlayConfig.get()?.display?.displayMode;
-                    if (storedMode) {
-                        CURRENT_MODE = storedMode;
-                    }
-                }
-
-                if (window.OverlayConfig) {
                     window.OverlayConfig.subscribe((cfg) => {
-                        const newMode = cfg.display?.displayMode || "team";
-                        if (newMode !== CURRENT_MODE) {
-                            CURRENT_MODE = newMode;
-                            const headerLabel = document.querySelector('#tableHeader .t-equipo');
-                            if (headerLabel) {
-                                headerLabel.textContent = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
-                            }
-                        }
+                        syncDisplayModeUI();
                         applyVisibility();
                         applyColumnVisibility();
                         scheduleRender();
@@ -1237,15 +1240,7 @@
                                 window.OverlayConfig.set({ [upd.category]: { [upd.key]: upd.value } });
                             }
                             if (upd.category === 'display' && upd.key === 'displayMode') {
-                                const newMode = upd.value === 'individual' ? 'individual' : 'team';
-                                if (newMode !== CURRENT_MODE) {
-                                    CURRENT_MODE = newMode;
-                                    const headerLabel = document.querySelector('#tableHeader .t-equipo');
-                                    if (headerLabel) {
-                                        headerLabel.textContent = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
-                                    }
-                                }
-                                if (CURRENT_SNAPSHOT && !renderScheduled) scheduleRender();
+                                syncDisplayModeUI();
                             }
                             if (upd.category === 'tables' && upd.key === 'teamBars') {
                                 applyVisibility();
@@ -1774,7 +1769,7 @@
 
                 const cols = ['40px', '45px', '1fr', '70px'];
                 if (showPP)    cols.push('45px');
-                cols.push('45px'); // ELIM siempre visible
+                cols.push('45px');
                 if (showTotal) cols.push('65px');
                 const gridVal = cols.join(' ');
 
@@ -1993,7 +1988,6 @@
                     });
                 }
 
-                // aliveTeams debe ser let porque se reasigna en el switch
                 let aliveTeams = teams.filter(t => t.liveMemberNum > 0);
                 const aliveCount = aliveTeams.length;
                 lastAliveCount = aliveCount;
@@ -2047,7 +2041,6 @@
                     const panels = paginatePlayers(teams);
                     const panelCount = panels.length;
                     if (panelCount > 0) {
-                        // Reiniciar temporizador si cambió la cantidad total de elementos
                         if (teams.length !== lastPanelSize) {
                             panelStartTime = Date.now();
                             lastPanelSize = teams.length;
@@ -2117,7 +2110,6 @@
                 try {
                     await renderPipeline(data, backpackData);
                 } finally {
-                    // Esperar dos frames para que el DOM y las animaciones se estabilicen
                     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
                     isTransitioning = false;
                     if (pendingQueue.length > 0) {
@@ -2209,24 +2201,17 @@
             }
 
             initExternalControl();
+            syncDisplayModeUI();
 
             (function initColumnDefaults() {
                 if (!window.OverlayConfig) return;
                 const cur = window.OverlayConfig.get();
 
-                // Hidratar CURRENT_MODE desde el estado persistido ANTES del primer render
-                const persistedMode = cur.display?.displayMode;
-                if (persistedMode && persistedMode !== CURRENT_MODE) {
-                    CURRENT_MODE = persistedMode;
-                }
-
-                // Actualizar header inmediatamente, sin esperar eventos ni renders
                 const headerLabel = document.querySelector('#tableHeader .t-equipo');
                 if (headerLabel) {
                     headerLabel.textContent = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
                 }
 
-                // Solo escribir defaults de columnas que genuinamente no existen
                 if (!cur.columns) {
                     window.OverlayConfig.set({ columns: { showPP: true, showTotal: true } });
                 } else {
