@@ -38,7 +38,7 @@ let data = {
     },
     scoring:{
         pp:{ 1:20,2:18,3:16,4:14,5:12,6:10,7:8,8:6,9:5,10:4,11:3,12:2,13:1,14:1,15:1,16:1 },
-        pePerKill:2,
+        pePerKill:1,
         bonusEnabled:false,
         bonus:{
             grenade:3,
@@ -140,14 +140,32 @@ function notify(){
 
 }
 
+function emitSnapshot(){
+    const snapshot = JSON.parse(JSON.stringify(data));
+    listeners.forEach(fn=>{ try{ fn(snapshot); }catch(e){} });
+}
+
 if(configChannel){
     configChannel.onmessage = function(e){
         if(!e.data || e.data.type !== "config_update" || !e.data.config) return;
         mergeDeep(data, e.data.config);
-        const snapshot = JSON.parse(JSON.stringify(data));
-        listeners.forEach(fn=>{ try{ fn(snapshot); }catch(err){} });
+        save();
+        emitSnapshot();
     };
 }
+
+let _ignoreStorageUpdate = false;
+
+window.addEventListener("storage", function(e){
+    if(e.key !== STORAGE_KEY) return;
+    if(!e.newValue) return;
+    if(_ignoreStorageUpdate) return;
+    try{
+        const parsed = JSON.parse(e.newValue);
+        mergeDeep(data, parsed);
+        emitSnapshot();
+    }catch(err){}
+});
 
 window.OverlayConfig = {
 
@@ -157,7 +175,9 @@ window.OverlayConfig = {
 
     set(patch){
         mergeDeep(data, patch);
+        _ignoreStorageUpdate = true;
         save();
+        _ignoreStorageUpdate = false;
         notify();
     },
 
@@ -169,5 +189,6 @@ window.OverlayConfig = {
 };
 
 load();
+save();
 
 })();

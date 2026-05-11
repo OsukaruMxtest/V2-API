@@ -2213,6 +2213,20 @@
             (function initColumnDefaults() {
                 if (!window.OverlayConfig) return;
                 const cur = window.OverlayConfig.get();
+
+                // Hidratar CURRENT_MODE desde el estado persistido ANTES del primer render
+                const persistedMode = cur.display?.displayMode;
+                if (persistedMode && persistedMode !== CURRENT_MODE) {
+                    CURRENT_MODE = persistedMode;
+                }
+
+                // Actualizar header inmediatamente, sin esperar eventos ni renders
+                const headerLabel = document.querySelector('#tableHeader .t-equipo');
+                if (headerLabel) {
+                    headerLabel.textContent = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
+                }
+
+                // Solo escribir defaults de columnas que genuinamente no existen
                 if (!cur.columns) {
                     window.OverlayConfig.set({ columns: { showPP: true, showTotal: true } });
                 } else {
@@ -2223,6 +2237,7 @@
                         window.OverlayConfig.set({ columns: patch });
                     }
                 }
+
                 applyColumnVisibility();
             })();
 
