@@ -1273,7 +1273,7 @@
 
                     lastOverlayCommandTimestamp = data.timestamp;
                     const cmd = data.cmd || data.command;
-                    if (cmd) handleOverlayCommand(cmd, data);
+                    if (cmd) handleOverlayCommand(cmd);
                     if (commandChannel?.postMessage) {
                         const rebroadcastPayload = { type: 'command', cmd, timestamp: data.timestamp };
                         if (cmd === 'set_display_mode') {
@@ -1290,7 +1290,7 @@
             }
 
             let reloadGuard = false;
-            function handleOverlayCommand(cmd, payload) {
+            function handleOverlayCommand(cmd) {
                 switch (cmd) {
                     case 'reset_overlay':
                         if (reloadGuard) return;
@@ -1327,11 +1327,8 @@
                     case 'display_mode_team':
                         window.OverlayConfig?.set({ display: { displayMode: 'team' } });
                         break;
-                    case 'set_display_mode': {
-                        const mode = payload?.mode === 'individual' ? 'individual' : 'team';
-                        window.OverlayConfig?.set({ display: { displayMode: mode } });
+                    case 'set_display_mode':
                         break;
-                    }
                     default:
                         break;
                 }
@@ -1372,7 +1369,7 @@
 
                         if (!snapshot || !snapshot.allinfo || 
                             !Array.isArray(snapshot.allinfo.TotalPlayerList) || 
-                            !Array isArray(snapshot.allinfo.TeamInfoList)) {
+                            !Array.isArray(snapshot.allinfo.TeamInfoList)) {
                             throw new Error('Invalid snapshot format');
                         }
 
