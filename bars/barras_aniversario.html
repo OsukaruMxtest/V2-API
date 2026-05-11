@@ -1244,6 +1244,7 @@
             }
 
             let lastOverlayCommandTimestamp = 0;
+            let lastProcessedCommandKey = null;
             let commandFetchInProgress = false;
 
             async function pollOverlayCommands() {
@@ -1257,6 +1258,12 @@
 
                     const data = await response.json();
                     if (!data || !data.timestamp) return;
+                    const commandKey = `${data.timestamp}_${data.cmd || data.command}_${data.mode || ''}`;
+                    if (commandKey === lastProcessedCommandKey) {
+                        return;
+                    }
+                    lastProcessedCommandKey = commandKey;
+
                     if (data.timestamp <= lastOverlayCommandTimestamp) return;
 
                     lastOverlayCommandTimestamp = data.timestamp;
@@ -1661,7 +1668,7 @@
             async function renderTable(teams) {
                 const headerLabel = document.querySelector('#tableHeader .t-equipo');
                 if (headerLabel) {
-                    headerLabel.textContent = '' + (CURRENT_MODE === "individual" ? "JUGADOR" : "EQUIPO");
+                    headerLabel.textContent = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === "individual" ? "JUGADOR" : "EQUIPO");
                 }
                 const currentGameID = CURRENT_SNAPSHOT?.GameID || CURRENT_SNAPSHOT?.allinfo?.GameID || null;
                 if (currentGameID && currentGameID !== lastRenderedGameID) {
@@ -2200,7 +2207,7 @@
 
                 const headerLabel = document.querySelector('#tableHeader .t-equipo');
                 if (headerLabel) {
-                    headerLabel.textContent = '' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
+                    headerLabel.textContent = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
                 }
 
                 if (!cur.columns) {
