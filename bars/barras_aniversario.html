@@ -1202,18 +1202,6 @@
                     window.OverlayBus.on('col_total_off',() => { applyColumnVisibility(); scheduleRender(); });
                 }
 
-                try {
-                    const cmdChannel = new BroadcastChannel('pubgm_commands');
-                    cmdChannel.onmessage = function(e) {
-                        const data = e.data;
-                        if (!data) return;
-                        const cmd = data.cmd || data.command;
-                        if (!cmd) return;
-                        if (window.OverlayBus) {
-                            window.OverlayBus.emit(cmd, { ...data, command: cmd });
-                        }
-                    };
-                } catch(e) {}
                 window.addEventListener('storage', (e) => {
                     if (e.key === 'overlay_manual_cmd' && e.newValue) {
                         try {
@@ -1256,6 +1244,7 @@
             }
 
             let lastOverlayCommandTimestamp = 0;
+            let lastProcessedCommandKey = null;
             let commandFetchInProgress = false;
 
             async function pollOverlayCommands() {
@@ -1269,15 +1258,21 @@
 
                     const data = await response.json();
                     if (!data || !data.timestamp) return;
+                    const commandKey = `${data.timestamp}_${data.cmd || data.command}_${data.mode || ''}`;
+                    if (commandKey === lastProcessedCommandKey) {
+                        return;
+                    }
+                    lastProcessedCommandKey = commandKey;
+
                     if (data.timestamp <= lastOverlayCommandTimestamp) return;
 
                     lastOverlayCommandTimestamp = data.timestamp;
                     const cmd = data.cmd || data.command;
-                    if (cmd) handleOverlayCommand(cmd);
+                    if (cmd) handleOverlayCommand(cmd, data);
                     if (commandChannel?.postMessage) {
                         const rebroadcastPayload = { type: 'command', cmd, timestamp: data.timestamp };
                         if (cmd === 'set_display_mode') {
-                            rebroadcastPayload.mode = CURRENT_MODE;
+                            rebroadcastPayload.mode = data.mode === 'individual' ? 'individual' : 'team';
                             rebroadcastPayload.command = cmd;
                         }
                         commandChannel.postMessage(rebroadcastPayload);
@@ -1290,7 +1285,7 @@
             }
 
             let reloadGuard = false;
-            function handleOverlayCommand(cmd) {
+            function handleOverlayCommand(cmd, payload = {}) {
                 switch (cmd) {
                     case 'reset_overlay':
                         if (reloadGuard) return;
@@ -1328,6 +1323,9 @@
                         window.OverlayConfig?.set({ display: { displayMode: 'team' } });
                         break;
                     case 'set_display_mode':
+                        if (payload.mode) {
+                            window.OverlayConfig?.set({ display: { displayMode: payload.mode } });
+                        }
                         break;
                     default:
                         break;
