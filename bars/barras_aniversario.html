@@ -557,7 +557,7 @@
             <div id="tableHeader" class="t-row">
                 <div class="t-cell">POS</div>
                 <div class="t-cell"></div>
-                <div class="t-cell t-equipo">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;EQUIPO</div>
+                <div class="t-cell t-equipo">EQUIPO</div>
                 <div class="t-cell"></div>
                 <div class="t-cell col-pp">PP</div>
                 <div class="t-cell">ELIM</div>
@@ -1171,6 +1171,10 @@
                         const newMode = cfg.display?.displayMode || "team";
                         if (newMode !== CURRENT_MODE) {
                             CURRENT_MODE = newMode;
+                            const headerLabel = document.querySelector('#tableHeader .t-equipo');
+                            if (headerLabel) {
+                                headerLabel.textContent = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
+                            }
                         }
                         applyVisibility();
                         applyColumnVisibility();
