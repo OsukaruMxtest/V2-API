@@ -557,7 +557,7 @@
             <div id="tableHeader" class="t-row">
                 <div class="t-cell">POS</div>
                 <div class="t-cell"></div>
-                <div class="t-cell t-equipo">EQUIPO</div>
+                <div class="t-cell t-equipo">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;EQUIPO</div>
                 <div class="t-cell"></div>
                 <div class="t-cell col-pp">PP</div>
                 <div class="t-cell">ELIM</div>
@@ -1173,7 +1173,7 @@
                             CURRENT_MODE = newMode;
                             const headerLabel = document.querySelector('#tableHeader .t-equipo');
                             if (headerLabel) {
-                                headerLabel.textContent = '' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
+                                headerLabel.textContent = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
                             }
                         }
                         applyVisibility();
@@ -1235,6 +1235,17 @@
                             const upd = JSON.parse(e.newValue);
                             if (window.OverlayConfig) {
                                 window.OverlayConfig.set({ [upd.category]: { [upd.key]: upd.value } });
+                            }
+                            if (upd.category === 'display' && upd.key === 'displayMode') {
+                                const newMode = upd.value === 'individual' ? 'individual' : 'team';
+                                if (newMode !== CURRENT_MODE) {
+                                    CURRENT_MODE = newMode;
+                                    const headerLabel = document.querySelector('#tableHeader .t-equipo');
+                                    if (headerLabel) {
+                                        headerLabel.textContent = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
+                                    }
+                                }
+                                if (CURRENT_SNAPSHOT && !renderScheduled) scheduleRender();
                             }
                             if (upd.category === 'tables' && upd.key === 'teamBars') {
                                 applyVisibility();
@@ -1664,7 +1675,7 @@
             async function renderTable(teams) {
                 const headerLabel = document.querySelector('#tableHeader .t-equipo');
                 if (headerLabel) {
-                    headerLabel.textContent = '' + (CURRENT_MODE === "individual" ? "JUGADOR" : "EQUIPO");
+                    headerLabel.textContent = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === "individual" ? "JUGADOR" : "EQUIPO");
                 }
                 const currentGameID = CURRENT_SNAPSHOT?.GameID || CURRENT_SNAPSHOT?.allinfo?.GameID || null;
                 if (currentGameID && currentGameID !== lastRenderedGameID) {
@@ -2202,8 +2213,15 @@
             (function initColumnDefaults() {
                 if (!window.OverlayConfig) return;
                 const cur = window.OverlayConfig.get();
-                if (!cur.columns || cur.columns.showPP === undefined || cur.columns.showTotal === undefined) {
+                if (!cur.columns) {
                     window.OverlayConfig.set({ columns: { showPP: true, showTotal: true } });
+                } else {
+                    const patch = {};
+                    if (cur.columns.showPP === undefined) patch.showPP = true;
+                    if (cur.columns.showTotal === undefined) patch.showTotal = true;
+                    if (Object.keys(patch).length > 0) {
+                        window.OverlayConfig.set({ columns: patch });
+                    }
                 }
                 applyColumnVisibility();
             })();
