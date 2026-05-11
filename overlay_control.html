@@ -1,0 +1,3659 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Overlay Control — Broadcast Panel</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
+    <script src="overlay_config.js"></script>
+    <script src="overlay_event_bus.js"></script>
+    <script src="overlay_bridge.js"></script>
+    <script src="overlay_sync.js"></script>
+    <script src="overlay_broadcast.js"></script>
+    <style>
+        :root {
+            --bg:       #0a0c0f;
+            --panel:    #1a1c21;
+            --border:   #2c2f38;
+            --accent:   #bc5efb;
+            --accent-hover: #a94cf0;
+            --muted:    #8a8f99;
+            --btn-bg:   #2c2f38;
+            --btn-bdr:  #444a58;
+            --shadow:   0 4px 12px rgba(0,0,0,0.6);
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: #f0f0f0;
+            padding: 16px;
+            min-width: 1200px;
+            overflow-x: auto;
+        }
+
+        .page-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-left: 20px;
+        }
+        .page-header h1 {
+            font-size: 10px;
+            font-weight: 700;
+            color: #fff;
+            border-left: 5px solid var(--accent);
+            padding-left: 14px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .top-row {
+            display: grid;
+            grid-template-columns: 1fr 320px 340px;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+        .map-block { display: flex; flex-direction: column; }
+        .map-row {
+            display: grid;
+            grid-template-columns: 1fr 220px;
+            gap: 12px;
+        }
+
+        .map-container, .close-teams-panel, .card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 16px;
+            box-shadow: var(--shadow);
+        }
+        .card { padding: 16px; }
+
+        .map-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+        .map-stats {
+            display: flex;
+            gap: 12px;
+            flex-shrink: 0;
+        }
+        .map-stat {
+            text-align: center;
+            min-width: 58px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 12px;
+            padding: 4px 0;
+        }
+        .ms-label {
+            font-size: 10px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .ms-value {
+            font-size: 16px;
+            font-weight: 700;
+            color: #fff;
+            margin-top: 2px;
+            text-shadow: 0 1px 2px #000;
+        }
+        .map-btn-row {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            flex: 1;
+            align-items: center;
+        }
+        .map-button, #toggleEliminatedButton {
+            background: var(--btn-bg);
+            border: 1px solid var(--btn-bdr);
+            color: #fff;
+            padding: 6px 12px;
+            border-radius: 30px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+        }
+        .map-button:hover, #toggleEliminatedButton:hover {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #000;
+            transform: translateY(-1px);
+        }
+        #toggleEliminatedButton {
+            background: #3f434d;
+            border-color: var(--accent);
+            margin-left: auto;
+        }
+
+        #container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1/1;
+			height: 780px;			
+            overflow: hidden;
+            border: 1px solid #444;
+            border-radius: 14px;
+            background: #2e2e2e;
+            cursor: grab;
+            box-shadow: inset 0 0 10px #000;
+        }
+        #container.no-pan { cursor: default; }
+        canvas {
+            display: block;
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+        }
+        #mapCanvas    { z-index: 1; }
+        #circleCanvas { z-index: 2; pointer-events: none; }
+        #arcCanvas    { z-index: 3; pointer-events: none; }
+        #playerCanvas { z-index: 4; pointer-events: none; }
+        #zoneCanvas   { z-index: 5; pointer-events: none; }
+
+        .close-teams-panel {
+            display: flex;
+            flex-direction: column;
+            align-self: stretch;
+        }
+        .close-teams-panel h3 {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--accent);
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 8px;
+        }
+        #closeTeamsContainer {
+            flex: 1;
+            overflow-y: auto;
+            font-size: 12px;
+        }
+        .teamPairContainer {
+            padding: 6px 10px;
+            margin: 4px 0;
+            background: #2c2f38;
+            border-left: 3px solid var(--accent);
+            border-radius: 6px;
+            color: #fff;
+            font-weight: 500;
+            box-shadow: 0 2px 4px #00000055;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .team-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(0,0,0,0.3);
+            padding: 2px 8px 2px 4px;
+            border-radius: 20px;
+            font-weight: 600;
+        }
+        .team-color-circle {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 11px;
+            font-weight: bold;
+            text-shadow: 0 1px 2px black;
+            box-shadow: 0 0 4px rgba(0,0,0,0.5);
+        }
+
+        .card h3 {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 8px;
+        }
+
+        .switch {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 14px;
+        }
+        .switch span {
+            font-size: 13px;
+            font-weight: 500;
+            color: #ddd;
+        }
+        .switch input[type="checkbox"] {
+            width: 44px;
+            height: 22px;
+            appearance: none;
+            background: #3a3f4a;
+            border-radius: 22px;
+            position: relative;
+            cursor: pointer;
+            outline: none;
+            transition: background 0.2s;
+            box-shadow: inset 0 1px 3px #000;
+        }
+        .switch input[type="checkbox"]:checked { background: var(--accent); }
+        .switch input[type="checkbox"]::before {
+            content: '';
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            background: #fff;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: left 0.2s;
+            box-shadow: 0 1px 3px #000;
+        }
+        .switch input[type="checkbox"]:checked::before { left: 24px; }
+        .switch-debug input[type="checkbox"]:checked { background: #f0a500; }
+        .switch-debug span { color: #f0a500; }
+
+        .btn {
+            background: var(--btn-bg);
+            border: 1px solid var(--btn-bdr);
+            color: #f0f0f0;
+            padding: 8px 14px;
+            border-radius: 30px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 2px 4px #000;
+        }
+        .btn:hover {
+            background: #4a505e;
+            border-color: var(--accent);
+            transform: translateY(-1px);
+        }
+        .btn-primary {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #000;
+            font-weight: 700;
+        }
+        .btn-primary:hover { background: var(--accent-hover); }
+        .btn-warning {
+            background: #f29f05;
+            border-color: #f29f05;
+            color: #000;
+            font-weight: 700;
+        }
+        .btn-warning:hover { background: #e08c00; }
+        .btn-danger {
+            background: #c0392b;
+            border-color: #c0392b;
+            color: #fff;
+            font-weight: 700;
+        }
+        .btn-danger:hover { background: #a93226; }
+        .btn-success {
+            background: #27ae60;
+            border-color: #27ae60;
+            color: #fff;
+            font-weight: 700;
+        }
+        .btn-success:hover { background: #1e8449; }
+        .btn-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .btn-grid .btn { text-align: center; }
+
+        .active-overlay-display {
+            background: #1e2128;
+            border: 1px solid #3a3f4a;
+            border-radius: 30px;
+            padding: 10px 16px;
+            font-size: 12px;
+            color: var(--muted);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: inset 0 1px 3px #000;
+        }
+        .active-overlay-display .dot {
+            width: 10px;
+            height: 10px;
+            background: #555;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .active-overlay-display.live {
+            color: #2ecc71;
+            border-color: #2ecc71;
+            background: #1a2a1f;
+        }
+        .active-overlay-display.live .dot {
+            background: #2ecc71;
+            box-shadow: 0 0 10px #2ecc71;
+        }
+
+        .overlay-timer-block {
+            background: #1e2128;
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 12px 16px;
+            margin-top: 12px;
+        }
+        .timer-label {
+            font-size: 10px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+        .timer-display {
+            font-size: 32px;
+            font-weight: 700;
+            color: #fff;
+            text-align: center;
+            font-variant-numeric: tabular-nums;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px var(--accent);
+        }
+        .timer-display.urgent { color: #e74c3c; text-shadow: 0 0 15px #e74c3c; }
+        .overlay-timer-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .overlay-timer-row input[type="number"] {
+            width: 70px;
+            padding: 6px;
+            background: #2c2f38;
+            border: 1px solid var(--btn-bdr);
+            color: #fff;
+            border-radius: 20px;
+            text-align: center;
+            font-size: 13px;
+        }
+
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 13px;
+            border-bottom: 1px dashed #3a3f4a;
+            padding-bottom: 4px;
+        }
+        .info-item span:first-child { color: #aaa; }
+        .info-item span:last-child {
+            font-weight: 600;
+            color: #fff;
+            background: #2c2f38;
+            padding: 2px 8px;
+            border-radius: 20px;
+        }
+
+        .threshold-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+            font-size: 12px;
+            background: #252830;
+            padding: 6px 10px;
+            border-radius: 30px;
+        }
+        .threshold-item input[type="number"] {
+            width: 60px;
+            padding: 4px;
+            background: #3a3f4a;
+            border: 1px solid var(--btn-bdr);
+            color: #fff;
+            border-radius: 20px;
+            text-align: center;
+        }
+
+        .section-sep {
+            border: none;
+            border-top: 1px solid #3a3f4a;
+            margin: 18px 0;
+        }
+
+        .debug-panel { display: none; }
+        .debug-panel.visible {
+            display: block;
+            margin-top: 16px;
+            background: #252830;
+            border-radius: 18px;
+            padding: 16px;
+        }
+        .debug-panel h3 {
+            color: #f0a500 !important;
+            border-color: #f0a500 !important;
+        }
+
+        .command-log {
+            margin-top: 16px;
+            background: #1a1c21;
+            border-radius: 10px;
+            padding: 10px;
+            border: 1px solid #3a3f4a;
+        }
+        .command-log h4 {
+            font-size: 11px;
+            color: #f0a500;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        #commandLogContainer {
+            max-height: 100px;
+            overflow-y: auto;
+            font-size: 10px;
+            color: #ccc;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        #commandLogContainer div {
+            padding: 2px 4px;
+            background: #252830;
+            border-left: 2px solid #bc5efb;
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #1e2128; }
+        ::-webkit-scrollbar-thumb {
+            background: #4a505e;
+            border-radius: 10px;
+        }
+
+        .auto-finals-panel {
+            display: none;
+            margin-top: 14px;
+            background: #12141a;
+            border: 1px solid #3a2060;
+            border-radius: 14px;
+            padding: 14px;
+            box-shadow: 0 0 20px rgba(188,94,251,0.12);
+        }
+        .auto-finals-panel.visible { display: block; }
+
+        .auto-finals-header {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .auto-finals-header::before {
+            content: '';
+            display: inline-block;
+            width: 8px; height: 8px;
+            background: var(--accent);
+            border-radius: 50%;
+            box-shadow: 0 0 8px var(--accent);
+            animation: pulse-dot 1.5s infinite;
+        }
+        @keyframes pulse-dot {
+            0%,100% { opacity:1; transform:scale(1); }
+            50% { opacity:0.4; transform:scale(0.7); }
+        }
+
+        .seq-toggle-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            margin-bottom: 14px;
+        }
+        .seq-toggle-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #1e2128;
+            border: 1px solid #2c2f38;
+            border-radius: 10px;
+            padding: 7px 10px;
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s;
+            font-size: 12px;
+            color: #ccc;
+            user-select: none;
+        }
+        .seq-toggle-item:hover { border-color: var(--accent); }
+        .seq-toggle-item input[type="checkbox"] {
+            width: 14px; height: 14px;
+            accent-color: var(--accent);
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .seq-toggle-item.wwcd-fixed {
+            background: rgba(188,94,251,0.1);
+            border-color: var(--accent);
+            color: var(--accent);
+            font-weight: 700;
+            cursor: default;
+            grid-column: 1 / -1;
+        }
+
+        .seq-btn-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .btn-seq-start {
+            background: #27ae60;
+            border: 1px solid #27ae60;
+            color: #fff;
+            font-weight: 700;
+        }
+        .btn-seq-start:hover { background: #1e8449; border-color: #1e8449; }
+        .btn-seq-start:disabled { background: #1a4d30; border-color: #1a4d30; color: #555; cursor: default; transform: none; }
+        .btn-seq-next {
+            background: #2980b9;
+            border: 1px solid #2980b9;
+            color: #fff;
+            font-weight: 700;
+        }
+        .btn-seq-next:hover { background: #1a6a9e; }
+        .btn-seq-next:disabled { background: #0e3452; border-color: #0e3452; color: #555; cursor: default; transform: none; }
+        .btn-seq-cancel {
+            background: #c0392b;
+            border: 1px solid #c0392b;
+            color: #fff;
+            font-weight: 700;
+        }
+        .btn-seq-cancel:hover { background: #a93226; }
+        .btn-seq-cancel:disabled { background: #4a1c17; border-color: #4a1c17; color: #555; cursor: default; transform: none; }
+
+        .broadcast-timeline {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            padding: 10px 0 4px;
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+        .broadcast-timeline::-webkit-scrollbar { display: none; }
+        .tl-step {
+            display: flex;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .tl-node {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+        .tl-circle {
+            width: 30px; height: 30px;
+            border-radius: 50%;
+            background: #252830;
+            border: 2px solid #3a3f4a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 700;
+            color: #555;
+            transition: all 0.3s;
+        }
+        .tl-circle.skipped { border-color: #3a3f4a; color: #444; }
+        .tl-circle.pending { border-color: #3a3f4a; color: #777; }
+        .tl-circle.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #000;
+            box-shadow: 0 0 14px var(--accent);
+            transform: scale(1.15);
+        }
+        .tl-circle.done {
+            background: #1e3a25;
+            border-color: #27ae60;
+            color: #27ae60;
+        }
+        .tl-label {
+            font-size: 9px;
+            color: #666;
+            text-align: center;
+            max-width: 40px;
+            line-height: 1.2;
+            white-space: nowrap;
+        }
+        .tl-label.active { color: var(--accent); font-weight: 700; }
+        .tl-label.done { color: #27ae60; }
+        .tl-connector {
+            width: 16px; height: 2px;
+            background: #3a3f4a;
+            margin: 0 1px;
+            align-self: flex-start;
+            margin-top: 14px;
+            transition: background 0.3s;
+            flex-shrink: 0;
+        }
+        .tl-connector.done { background: #27ae60; }
+
+        .seq-status-bar {
+            display: none;
+            background: #0e1016;
+            border: 1px solid #3a2060;
+            border-radius: 10px;
+            padding: 8px 12px;
+            font-size: 11px;
+            margin-top: 10px;
+        }
+        .seq-status-bar.visible { display: block; }
+        .seq-status-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        .seq-status-label { color: var(--muted); }
+        .seq-status-value { color: #fff; font-weight: 600; }
+        .seq-progress-track {
+            height: 4px;
+            background: #252830;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .seq-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #27ae60, var(--accent));
+            border-radius: 10px;
+            transition: width 0.5s ease;
+        }
+
+        .extend-alert-btn {
+            width: 100%;
+            margin: 8px 0 12px;
+            background: #f39c12;
+            border-color: #e67e22;
+            color: #000;
+            font-weight: 700;
+        }
+        .extend-alert-btn:hover {
+            background: #e67e22;
+        }
+
+        .seq-alert-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+            background: #0a0c0f;
+            border-radius: 10px;
+            padding: 8px 10px;
+            border: 1px solid #2c2f38;
+        }
+        .seq-alert-col {
+            flex: 1;
+            text-align: center;
+        }
+        .seq-alert-label {
+            font-size: 9px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }
+        .seq-alert-value {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+        .seq-next-val { color: #8a8f99; font-weight: 500; }
+        .seq-alert-arrow { color: #3a3f4a; font-size: 18px; flex-shrink: 0; }
+
+        .overlay-heartbeat {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #1a1c21;
+            border: 1px solid #2c2f38;
+            border-radius: 10px;
+            padding: 7px 12px;
+            font-size: 11px;
+            margin-top: 10px;
+            color: var(--muted);
+        }
+        .hb-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: #555;
+            flex-shrink: 0;
+            transition: background 0.3s, box-shadow 0.3s;
+        }
+        .hb-dot.alive {
+            background: #2ecc71;
+            box-shadow: 0 0 8px #2ecc71;
+        }
+        .hb-dot.stale { background: #f0a500; }
+        .hb-dot.dead  { background: #e74c3c; }
+        .hb-label { flex: 1; }
+        .hb-count { font-weight: 700; color: #ccc; font-size: 10px; }
+
+        .connection-monitor, .polling-monitor {
+            margin-top: 16px;
+        }
+
+        .seq-control-panel {
+            background: #12141a;
+            border: 1px solid #3a2060;
+            border-radius: 14px;
+            padding: 14px;
+            margin-bottom: 14px;
+            box-shadow: 0 0 20px rgba(188,94,251,0.10);
+        }
+        .seq-control-header {
+            font-size: 11px; font-weight: 700;
+            color: var(--accent); text-transform: uppercase;
+            letter-spacing: 1px; margin-bottom: 12px;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .seq-control-header .live-dot {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: #444; flex-shrink: 0;
+            transition: background 0.3s, box-shadow 0.3s;
+        }
+        .seq-control-header .live-dot.on {
+            background: var(--accent);
+            box-shadow: 0 0 8px var(--accent);
+            animation: pulse-dot 1.5s infinite;
+        }
+        .seq-tl {
+            display: flex; align-items: center; gap: 0;
+            margin-bottom: 14px; justify-content: center;
+        }
+        .seq-tl-step { display: flex; align-items: center; }
+        .seq-tl-node {
+            display: flex; flex-direction: column; align-items: center; gap: 3px;
+        }
+        .seq-tl-circle {
+            width: 34px; height: 34px; border-radius: 50%;
+            background: #1e2128; border: 2px solid #3a3f4a;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 9px; font-weight: 700; color: #555;
+            transition: all 0.3s; cursor: pointer;
+        }
+        .seq-tl-circle:hover { border-color: var(--accent); color: var(--accent); }
+        .seq-tl-circle.active {
+            background: var(--accent); border-color: var(--accent);
+            color: #000; box-shadow: 0 0 14px var(--accent);
+            transform: scale(1.12);
+        }
+        .seq-tl-circle.active.paused {
+            background: #f0a500; border-color: #f0a500;
+            box-shadow: 0 0 14px #f0a500; color: #000;
+            animation: none;
+        }
+        .seq-tl-circle.done {
+            background: #1e3a25; border-color: #27ae60; color: #27ae60;
+        }
+        .seq-tl-label {
+            font-size: 9px; color: #555; text-align: center;
+            white-space: nowrap; transition: color 0.3s;
+        }
+        .seq-tl-label.active { color: var(--accent); font-weight: 700; }
+        .seq-tl-label.active.paused { color: #f0a500; }
+        .seq-tl-label.done { color: #27ae60; }
+        .seq-tl-conn {
+            width: 18px; height: 2px; background: #3a3f4a;
+            margin: 0 2px; margin-bottom: 14px; flex-shrink: 0;
+            transition: background 0.3s;
+        }
+        .seq-tl-conn.done { background: #27ae60; }
+        .seq-status-row2 {
+            display: flex; align-items: center; justify-content: space-between;
+            background: #0e1016; border: 1px solid #2c2f38;
+            border-radius: 8px; padding: 6px 10px; margin-bottom: 10px;
+            font-size: 11px;
+        }
+        .seq-status-step { color: #fff; font-weight: 600; }
+        .seq-status-timer { color: var(--accent); font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; }
+        .seq-status-timer.paused { color: #f0a500; }
+        .seq-status-badge {
+            font-size: 9px; padding: 2px 7px; border-radius: 10px;
+            background: #1e2128; color: var(--muted);
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .seq-status-badge.live  { background: rgba(46,204,113,0.15); color: #2ecc71; }
+        .seq-status-badge.paused{ background: rgba(240,165,0,0.15);  color: #f0a500; }
+        .seq-ctrl-row {
+            display: grid; grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 6px; margin-bottom: 8px;
+        }
+        .seq-ctrl-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .btn-seq-ctrl {
+            padding: 7px 4px; border-radius: 8px; border: 1px solid;
+            font-size: 11px; font-weight: 700; cursor: pointer;
+            transition: all 0.15s; text-align: center;
+        }
+        .btn-seq-ctrl:disabled { opacity: 0.3; cursor: default; transform: none !important; }
+        .btn-sc-start  { background:#27ae60; border-color:#27ae60; color:#fff; }
+        .btn-sc-start:not(:disabled):hover { background:#1e8449; }
+        .btn-sc-next   { background:#2980b9; border-color:#2980b9; color:#fff; }
+        .btn-sc-next:not(:disabled):hover { background:#1a6a9e; }
+        .btn-sc-pause  { background:#f0a500; border-color:#f0a500; color:#000; }
+        .btn-sc-pause:not(:disabled):hover { background:#d4900a; }
+        .btn-sc-extend { background:#e67e22; border-color:#e67e22; color:#fff; }
+        .btn-sc-extend:not(:disabled):hover { background:#ca6f1e; }
+        .btn-sc-cancel { background:#c0392b; border-color:#c0392b; color:#fff; grid-column:1/-1; }
+        .btn-sc-cancel:not(:disabled):hover { background:#a93226; }
+        .tabla-ctrl-row {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-top: 6px;
+        }
+        .btn-tabla-pause {
+            font-size: 11px; padding: 5px 10px;
+            border-radius: 8px; border: 1px solid #f0a500;
+            background: rgba(240,165,0,0.1); color: #f0a500;
+            cursor: pointer; transition: all 0.15s; font-weight: 600;
+        }
+        .btn-tabla-pause:hover  { background: rgba(240,165,0,0.2); }
+        .btn-tabla-pause.paused { background: rgba(46,204,113,0.1); border-color:#2ecc71; color:#2ecc71; }
+        .tabla-paused { opacity: 0 !important; visibility: hidden !important; transition: none !important; }
+        .tabla-resuming { transition: opacity 0.5s ease-in-out !important; }
+
+        .seq-mode-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #0e1016;
+            border: 1px solid #2c2f38;
+            border-radius: 8px;
+            padding: 7px 10px;
+            margin-bottom: 10px;
+            font-size: 11px;
+        }
+        .seq-mode-label { color: #aaa; font-weight: 600; }
+        .seq-mode-toggle-wrap { display: flex; align-items: center; gap: 6px; }
+        .seq-mode-opt {
+            font-size: 10px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.5px; transition: color 0.2s;
+        }
+        .seq-mode-opt.auto-lbl  { color: #27ae60; }
+        .seq-mode-opt.manual-lbl { color: #8a8f99; }
+        .seq-mode-opt.manual-lbl.active { color: #2980b9; }
+        #seqModeToggle {
+            width: 36px; height: 18px; appearance: none;
+            background: #27ae60; border-radius: 18px;
+            position: relative; cursor: pointer; outline: none;
+            transition: background 0.2s; box-shadow: inset 0 1px 3px #000;
+        }
+        #seqModeToggle:checked { background: #2980b9; }
+        #seqModeToggle::before {
+            content: ''; position: absolute;
+            width: 14px; height: 14px; background: #fff; border-radius: 50%;
+            top: 2px; left: 2px; transition: left 0.2s; box-shadow: 0 1px 3px #000;
+        }
+        #seqModeToggle:checked::before { left: 20px; }
+        .seq-manual-note {
+            font-size: 10px; color: #2980b9;
+            background: rgba(41,128,185,0.08);
+            border: 1px solid rgba(41,128,185,0.25);
+            border-radius: 6px; padding: 5px 8px; margin-bottom: 8px; display: none;
+        }
+        .seq-manual-note.visible { display: block; }
+
+        .scoring-config { margin-top: 14px; background: #1a1c21; border-radius: 10px; padding: 12px; border: 1px solid #2c2f38; }
+        .scoring-config h5 { font-size: 11px; color: #f0a500; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px; }
+        .scoring-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 11px; color: #ccc; }
+        .scoring-row input[type="number"] {
+            width: 52px; padding: 3px 6px; background: #2c2f38;
+            border: 1px solid #444a58; color: #fff; border-radius: 6px;
+            text-align: center; font-size: 11px;
+        }
+        .scoring-rank-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 6px; }
+        .scoring-rank-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+        .scoring-rank-cell label { font-size: 9px; color: #666; }
+        .scoring-rank-cell input { width: 44px; padding: 3px; background: #2c2f38; border: 1px solid #444a58; color: #fff; border-radius: 5px; text-align: center; font-size: 11px; }
+        .scoring-apply-btn { width: 100%; margin-top: 10px; padding: 6px; background: #f0a500; border: none; color: #000; font-weight: 700; border-radius: 6px; cursor: pointer; font-size: 11px; }
+        .scoring-apply-btn:hover { background: #d4900a; }
+
+        .obs-filter { margin-top: 14px; background: #1a1c21; border-radius: 10px; padding: 12px; border: 1px solid #2c2f38; }
+        .obs-filter h5 { font-size: 11px; color: #f0a500; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px; }
+        .obs-filter-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+        .obs-cb-item {
+            display: flex; flex-direction: column; align-items: center; gap: 4px;
+            background: #252830; border-radius: 8px; padding: 6px 4px;
+            border: 1px solid #2c2f38; font-size: 11px; color: #ccc;
+            cursor: pointer; transition: border-color 0.15s;
+        }
+        .obs-cb-item:hover { border-color: var(--accent); }
+        .obs-cb-item input[type="checkbox"] { accent-color: #2ecc71; width: 14px; height: 14px; cursor: pointer; }
+        .obs-cb-item.blocked { border-color: #c0392b !important; background: rgba(192,57,43,0.08); }
+        .obs-cb-item.blocked .obs-cb-name { color: #c0392b; }
+        .obs-apply-btn { width: 100%; margin-top: 8px; padding: 6px; background: #2980b9; border: none; color: #fff; font-weight: 700; border-radius: 6px; cursor: pointer; font-size: 11px; }
+        .obs-apply-btn:hover { background: #1a6a9e; }
+    </style>
+</head>
+<body>
+
+<div class="page-header">
+    <h1>Overlay Control — Broadcast Panel</h1>
+</div>
+
+<div class="top-row">
+
+    <div class="map-block">
+        <div class="map-row">
+            <div class="map-container">
+                <div class="map-header">
+                    <div class="map-stats">
+                        <div class="map-stat">
+                            <div class="ms-label">Jugadores</div>
+                            <div class="ms-value"><span id="remainingPlayers">0</span>/<span id="totalPlayerCountDisplay">0</span></div>
+                        </div>
+                        <div class="map-stat">
+                            <div class="ms-label">Equipos</div>
+                            <div class="ms-value"><span id="remainingTeams">0</span>/<span id="totalTeams">0</span></div>
+                        </div>
+                        <div class="map-stat">
+                            <div class="ms-label">Elim.</div>
+                            <div class="ms-value" id="totalEliminations">0</div>
+                        </div>
+                    </div>
+                    <div class="map-btn-row">
+                        <button class="map-button" data-map="ERANGEL">ERANGEL</button>
+                        <button class="map-button" data-map="MIRAMAR">MIRAMAR</button>
+                        <button class="map-button" data-map="SANHOK">SANHOK</button>
+                        <button class="map-button" data-map="VIKENDI">VIKENDI</button>
+                        <button class="map-button" data-map="RONDO">RONDO</button>
+                        <button id="toggleEliminatedButton">Mostrar Eliminados</button>
+                    </div>
+                </div>
+
+                <div id="container">
+                    <canvas id="mapCanvas"></canvas>
+                    <canvas id="circleCanvas"></canvas>
+                    <canvas id="arcCanvas"></canvas>
+                    <canvas id="playerCanvas"></canvas>
+                    <canvas id="zoneCanvas"></canvas>
+                </div>
+            </div>
+
+            <div class="close-teams-panel">
+                <h3>Equipos Cercanos ≤ 300m</h3>
+                <div id="closeTeamsContainer"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card alerts-card">
+        <h3>Alertas del Broadcast</h3>
+        <div class="switch"><span>Primera baja</span>
+            <input type="checkbox" data-category="alerts" data-key="firstKill" checked></div>
+        <div class="switch"><span>Primera granada</span>
+            <input type="checkbox" data-category="alerts" data-key="firstGrenade" checked></div>
+        <div class="switch"><span>Eliminación de equipo</span>
+            <input type="checkbox" data-category="alerts" data-key="teamEliminated" checked></div>
+        <div class="switch"><span>Zona / círculo</span>
+            <input type="checkbox" data-category="alerts" data-key="zone" checked></div>
+
+        <div class="switch"><span>Tabla equipos (16)</span>
+            <input type="checkbox" data-category="tables" data-key="teamBars" checked></div>
+
+        <div class="switch">
+            <span>Mostrar PP</span>
+            <input type="checkbox" id="togglePP" data-category="columns" data-key="showPP" checked>
+        </div>
+
+        <div class="switch">
+            <span>Mostrar TOTAL</span>
+            <input type="checkbox" id="toggleTotal" data-category="columns" data-key="showTotal" checked>
+        </div>
+
+        <div class="switch">
+            <span>Modo Individual</span>
+            <input type="checkbox" id="displayModeToggle">
+        </div>
+
+        <hr class="section-sep">
+        <hr class="section-sep">
+        <h3>Información del Círculo</h3>
+        <div class="info-item"><span>Tiempo de Juego:</span>    <span id="gameTime">00:00</span></div>
+        <div class="info-item"><span>Estado del Círculo:</span> <span id="circleStatus">0</span></div>
+        <div class="info-item"><span>Cuenta Regresiva:</span>   <span id="countdown">00:00</span></div>
+        <div class="info-item"><span>Índice del Círculo:</span> <span id="circleIndex">0</span></div>
+        <div class="info-item"><span>Contador:</span>           <span id="counter">00:00</span></div>
+        <div class="info-item"><span>Tiempo Máximo:</span>      <span id="maxTime">00:00</span></div>
+        <hr class="section-sep">
+        <h3>Alertas de Audio</h3>
+        <div class="threshold-item">
+            <span>Alerta cuando queden</span>
+            <input type="number" id="alertThreshold1" min="1" value="10">
+            <span>equipos</span>
+        </div>
+        <div class="threshold-item">
+            <span>Alerta final cuando queden</span>
+            <input type="number" id="alertThreshold2" min="1" value="5">
+            <span>equipos</span>
+        </div>
+        <div class="switch" style="margin-top:12px;">
+            <span>Habilitar sonidos</span>
+            <input type="checkbox" id="enableAlertSounds" checked>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+            <button class="btn" id="testAlert1Button">Probar Alerta 1</button>
+            <button class="btn" id="testAlert2Button">Probar Alerta 2</button>
+        </div>
+
+        <hr class="section-sep">
+        <div id="dropExportPanel" style="padding:10px; background:rgba(0,0,0,0.2); border-radius:8px; border:1px solid #333;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                <span style="font-weight:600; color:#81c784; font-size:12px;">📍 Exportar Drops + Rutas</span>
+                <label style="display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none;">
+                    <div style="position:relative; width:36px; height:20px;">
+                        <input type="checkbox" id="dropExportToggle"
+                            style="opacity:0; width:100%; height:100%; position:absolute; cursor:pointer; margin:0; z-index:2;">
+                        <span id="dropExportSlider" style="position:absolute; top:0; left:0; right:0; bottom:0; background:#388e3c; border-radius:20px; transition:background 0.2s; pointer-events:none;">
+                            <span id="dropExportThumb" style="position:absolute; top:2px; left:2px; width:16px; height:16px; background:white; border-radius:50%; transition:transform 0.2s; pointer-events:none;"></span>
+                        </span>
+                    </div>
+                </label>
+            </div>
+            <div style="font-size:11px; color:#888; margin-bottom:6px;">Auto-exporta al aterrizar todos y al fin de partida.</div>
+            <button id="manualDropExportBtn"
+                style="width:100%; padding:6px 8px; font-size:11px; background:#2e7d32; color:#fff; border:none; border-radius:4px; cursor:pointer;">
+                💾 Exportar ahora
+            </button>
+            <div id="dropExportStatus" style="font-size:11px; color:#81c784; margin-top:4px;">Activo</div>
+        </div>
+    </div>
+
+    <div class="card finals-card">
+        <h3>Overlays Finales</h3>
+        <div id="activeOverlayDisplay" class="active-overlay-display">
+            <div class="dot"></div>
+            <span id="activeOverlayLabel">Sin overlay activo</span>
+        </div>
+
+        <div class="seq-control-panel" id="seqControlPanel">
+            <div class="seq-control-header">
+                <div class="live-dot" id="seqLiveDot"></div>
+                🎬 Control Secuencia Final
+            </div>
+
+            <div class="seq-mode-row">
+                <span class="seq-mode-label">Modo Secuencia</span>
+                <div class="seq-mode-toggle-wrap">
+                    <span class="seq-mode-opt auto-lbl" id="seqModeAutoLbl">Auto</span>
+                    <input type="checkbox" id="seqModeToggle" title="Activar modo manual">
+                    <span class="seq-mode-opt manual-lbl" id="seqModeMnlLbl">Manual</span>
+                </div>
+            </div>
+            <div class="seq-manual-note" id="seqManualNote">
+                ⏭ Modo manual: WWCD automático · MVP/MVT/Tabla requieren botón <strong>Sig.</strong> · Al llegar a Tabla, <strong>Sig.</strong> la oculta.
+            </div>
+
+            <div class="seq-tl">
+                <div class="seq-tl-step">
+                    <div class="seq-tl-node">
+                        <div class="seq-tl-circle" id="tlWinner" data-cmd="showWinner" title="Mostrar WWCD">🏆</div>
+                        <div class="seq-tl-label" id="tlWinnerLbl">WWCD</div>
+                    </div>
+                </div>
+                <div class="seq-tl-conn" id="tlConn1"></div>
+                <div class="seq-tl-step">
+                    <div class="seq-tl-node">
+                        <div class="seq-tl-circle" id="tlMVP" data-cmd="showMVP" title="Mostrar MVP">⭐</div>
+                        <div class="seq-tl-label" id="tlMVPLbl">MVP</div>
+                    </div>
+                </div>
+                <div class="seq-tl-conn" id="tlConn2"></div>
+                <div class="seq-tl-step">
+                    <div class="seq-tl-node">
+                        <div class="seq-tl-circle" id="tlMVT" data-cmd="showMVT" title="Mostrar MVT">🔥</div>
+                        <div class="seq-tl-label" id="tlMVTLbl">MVT</div>
+                    </div>
+                </div>
+                <div class="seq-tl-conn" id="tlConn3"></div>
+                <div class="seq-tl-step">
+                    <div class="seq-tl-node">
+                        <div class="seq-tl-circle" id="tlTabla" data-cmd="showTablaPartida" title="Mostrar Tabla">📊</div>
+                        <div class="seq-tl-label" id="tlTablaLbl">Tabla</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="seq-status-row2">
+                <span class="seq-status-step" id="seqStepLabel">Sin secuencia</span>
+                <span class="seq-status-timer" id="seqTimerLabel">—</span>
+                <span class="seq-status-badge" id="seqBadge">Inactivo</span>
+            </div>
+
+            <div class="seq-ctrl-row">
+                <button class="btn-seq-ctrl btn-sc-start"  id="seqBtnStart">▶ Iniciar</button>
+                <button class="btn-seq-ctrl btn-sc-next"   id="seqBtnNext"  disabled>⏭ Sig.</button>
+                <button class="btn-seq-ctrl btn-sc-pause"  id="seqBtnPause" disabled>⏸ Pausa</button>
+                <button class="btn-seq-ctrl btn-sc-extend" id="seqBtnExtend"disabled>+5s</button>
+            </div>
+            <div class="seq-ctrl-row2">
+                <button class="btn-seq-ctrl btn-sc-cancel" id="seqBtnCancel" disabled>✕ Cancelar / Ocultar todo</button>
+            </div>
+        </div>
+
+        <div class="btn-grid" style="grid-template-columns:1fr 1fr">
+            <button class="btn btn-primary" id="showTablaDesafios">Tabla Desafíos</button>
+            <button class="btn btn-primary" id="showTablaGeneral">Tabla General</button>
+            <button class="btn btn-warning" id="hideAll" style="grid-column:1/-1;">Ocultar Todo</button>
+        </div>
+        <div class="overlay-timer-block">
+            <div class="timer-label">Duración manual</div>
+            <div class="timer-display" id="overlayTimerDisplay">—</div>
+            <div class="overlay-timer-row">
+                <input type="number" id="overlayDuration" min="1" max="300" value="30">
+                <span style="font-size:11px;color:var(--muted);">seg.</span>
+                <button class="btn btn-success" id="addFiveBtn" style="padding:5px 10px;font-size:11px;flex:1;">+5 segundos</button>
+                <button class="btn-tabla-pause" id="pauseTablaBtn" disabled style="padding:5px 10px;font-size:11px;flex:1;">⏸ Pausar</button>
+            </div>
+        </div>
+        <p style="font-size:10px;color:#777;margin-top:8px;">Solo un overlay visible a la vez. Manual anula automático.</p>
+        <hr class="section-sep">
+
+        <div id="pcobMonitor" style="background:#111316; border:1px solid #2c2f38; border-radius:12px; padding:12px; margin-bottom:12px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                <h4 style="color:#f0a500; font-size:12px; margin:0;">📡 PCOBs Conectados</h4>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <span id="pcobDot" style="width:10px; height:10px; border-radius:50%; background:#555; display:inline-block;"></span>
+                    <span id="pcobCount" style="font-size:20px; font-weight:700; color:#fff;">—</span>
+                </div>
+            </div>
+            <div id="pcobList" style="font-size:11px; color:#8a8f99; line-height:1.8;"></div>
+        </div>
+
+        <div class="switch switch-debug">
+            <span>Debug Mode</span>
+            <input type="checkbox" id="debugToggle">
+        </div>
+        <div class="debug-panel" id="debugPanel">
+            <h3>Debug / Diagnóstico</h3>
+            <p style="font-size:11px;color:#aaa;margin-bottom:10px;">Monitor de conexión y comandos.</p>
+
+            <div class="command-log">
+                <h4>📋 Últimos comandos</h4>
+                <div id="commandLogContainer"></div>
+            </div>
+
+            <div class="connection-monitor" style="margin-top:16px;">
+                <h4 style="color:#f0a500; font-size:12px; margin-bottom:8px;">Aggregator Connection</h4>
+                <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+                    <div style="display:flex; align-items:center;">
+                        <span class="dot" id="connectionDot" style="background:#555; width:10px; height:10px; border-radius:50%; margin-right:4px;"></span>
+                        <span id="connectionState">Sin verificar</span>
+                    </div>
+                    <span id="connectionLatency" style="color:#aaa; font-size:11px;"></span>
+                </div>
+                <button class="btn" id="diagConnectionBtn" style="width:100%;margin-bottom:8px;font-size:11px;">🔌 Diagnosticar conexión</button>
+                <div style="font-size:11px; margin-top:4px;">
+                    <div>Snapshot: <span id="snapshotStatus">-</span> <span id="snapshotLatency">-</span></div>
+                    <div>Command: <span id="commandStatus">-</span> <span id="commandLatency">-</span></div>
+                </div>
+            </div>
+
+            <div class="polling-monitor" style="margin-top:16px;">
+                <h4 style="color:#f0a500; font-size:12px; margin-bottom:8px;">Polling Monitor</h4>
+                <div style="font-size:11px; display:flex; justify-content:space-between;">
+                    <span>Snapshot Polling: <span id="snapshotPollInterval">1000ms</span></span>
+                    <span>Last Snapshot: <span id="lastSnapshotTime">-</span></span>
+                </div>
+                <div style="font-size:11px; display:flex; justify-content:space-between;">
+                    <span>Command Polling: <span id="commandPollInterval">N/A</span></span>
+                    <span>Last Command: <span id="lastCommandTime">-</span></span>
+                </div>
+            </div>
+
+            <div class="switch" style="margin:16px 0;">
+                <span>Monitoreo continuo (polling cada 2s)</span>
+                <input type="checkbox" id="continuousMonitoring">
+            </div>
+
+            <div class="console-log" style="margin-top:16px;">
+                <h4 style="color:#f0a500; font-size:12px; margin-bottom:8px;">Console</h4>
+                <div id="consoleContainer" style="max-height:150px; overflow-y:auto; background:#1a1c21; padding:8px; border-radius:8px; font-size:11px; border:1px solid #2c2f38;"></div>
+            </div>
+
+            <hr style="border-color:#2c2f38;margin:16px 0 12px;">
+            <div class="switch" style="margin-bottom:4px;">
+                <span style="color:#bc5efb;font-weight:600;">Modo edición overlays</span>
+                <input type="checkbox" id="overlayEditToggle">
+            </div>
+            <p style="font-size:10px;color:#666;margin-bottom:0;">Activa paneles de posicionamiento y prueba en los overlays (alertas, etc). Independiente del diagnóstico de conexión.</p>
+
+            <hr style="border-color:#2c2f38;margin:14px 0 12px;">
+            <div class="switch" style="margin-bottom:4px;">
+                <span style="color:#81c784;font-weight:600;">🧪 Mostrar utilidades con Top-3</span>
+                <input type="checkbox" id="utilitiesTop3Toggle">
+            </div>
+            <p style="font-size:10px;color:#666;margin-bottom:0;">Muestra granadas, smokes, flash y molotov en las tarjetas finales cuando quedan 3 equipos. Por defecto están ocultos.</p>
+
+            <div class="scoring-config" id="scoringConfigPanel">
+                <h5>⚙️ Puntos por Posición (PP)</h5>
+                <div class="scoring-rank-grid" id="ppRankGrid">
+                </div>
+
+                <hr style="border-color:#2c2f38;margin:12px 0 10px;">
+                <h5>⚙️ Puntos por Eliminación (PE)</h5>
+                <div class="scoring-row">
+                    <span>Pts por baja</span>
+                    <input type="number" id="pePerKill" min="0" max="20" value="2">
+                </div>
+
+                <hr style="border-color:#2c2f38;margin:10px 0 10px;">
+                <h5>⚙️ Bonus</h5>
+                <div class="scoring-row">
+                    <label class="switch" style="margin:0; width:100%; justify-content:space-between;">
+                        <span>Habilitar bonus</span>
+                        <input type="checkbox" id="bonusEnabled" checked>
+                    </label>
+                </div>
+                <div id="bonusFields">
+                    <div class="scoring-row"><span>Granada (x kill)</span><input type="number" id="bonusGrenade" min="0" value="3"></div>
+                    <div class="scoring-row"><span>Vehículo (x kill)</span><input type="number" id="bonusVehicle" min="0" value="8"></div>
+                    <div class="scoring-row"><span>Melee (x kill)</span><input type="number" id="bonusMelee" min="0" value="13"></div>
+                    <div class="scoring-row"><span>Molotov (x kill)</span><input type="number" id="bonusMolotov" min="0" value="3"></div>
+                    <div class="scoring-row"><span>Mayor distancia</span><input type="number" id="bonusDistance" min="0" value="15"></div>
+                    <div class="scoring-row"><span>Baja más lejana</span><input type="number" id="bonusKillDist" min="0" value="18"></div>
+                </div>
+
+                <button class="scoring-apply-btn" id="scoringApplyBtn">💾 Aplicar y guardar</button>
+                <div id="scoringApplyMsg" style="font-size:10px;color:#2ecc71;margin-top:5px;display:none;">✓ Configuración guardada y difundida</div>
+            </div>
+
+            <div class="obs-filter" id="obsFilterPanel">
+                <h5>📡 Filtro de Observers (recepción)</h5>
+                <p style="font-size:10px;color:#666;margin-bottom:8px;">Desmarca un observer para ignorar su data en el merge. Útil al compartir infraestructura entre torneos.</p>
+                <div class="obs-filter-grid" id="obsFilterGrid">
+                </div>
+                <button class="obs-apply-btn" id="obsFilterApplyBtn">📡 Aplicar filtro</button>
+                <div id="obsFilterMsg" style="font-size:10px;color:#2ecc71;margin-top:5px;display:none;">✓ Filtro enviado al aggregator</div>
+            </div>
+        </div>
+    </div>
+
+<script>
+(function () {
+    'use strict';
+
+    if (typeof BroadcastChannel === 'undefined') {
+        console.warn('[OVERLAY CONTROL] BroadcastChannel no soportado en este navegador. La sincronización entre overlays podría no funcionar.');
+    }
+
+    const AGGREGATOR_URL = "https://pubgm-aggregator-production.up.railway.app";
+    let lastCmdTimeGeneral = 0;   // rate limit para comandos NO overlay
+    const CMD_DELAY = 300; 
+
+    let monitoringEnabled = false;
+    let _monitorInterval = null;      
+    let _snapshotInterval = null;     
+
+    function startMonitoring() {
+        if (monitoringEnabled) return; 
+        monitoringEnabled = true;
+        addConsoleEntry('MON', 'Monitoring started (polling cada 2s)', true);
+        fetchSnapshot();
+        if (_snapshotInterval) clearInterval(_snapshotInterval);
+        _snapshotInterval = setInterval(fetchSnapshot, 2000); 
+    }
+
+    function stopMonitoring() {
+        monitoringEnabled = false;
+        if (_snapshotInterval) {
+            clearInterval(_snapshotInterval);
+            _snapshotInterval = null;
+        }
+        addConsoleEntry('MON', 'Monitoring stopped', true);
+    }
+
+    let lastSnapshotTime = 0;
+    let lastCommandTime = 0;
+    let snapshotStatus = { ok: false, latency: 0 };
+    let commandStatus = { ok: false, latency: 0 };
+
+    const consoleContainer = document.getElementById('consoleContainer');
+
+    function logConsole(type, message, isSuccess = true) {
+        if (!consoleContainer) return;
+        const entry = document.createElement('div');
+        const time = new Date().toLocaleTimeString('es-ES', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        let color = '#2ecc71';
+        if (!isSuccess) color = '#e74c3c';
+        if (type === 'CMD' && isSuccess) color = '#bc5efb';
+        entry.style.color = color;
+        entry.style.fontFamily = 'monospace';
+        entry.style.whiteSpace = 'nowrap';
+        entry.textContent = `[${time}] ${type} → ${message}`;
+        consoleContainer.prepend(entry);
+        while (consoleContainer.children.length > 50) {
+            consoleContainer.removeChild(consoleContainer.lastChild);
+        }
+    }
+    function addConsoleEntry(type, message, isSuccess = true) {
+        logConsole(type, message, isSuccess);
+    }
+
+    async function testAggregatorConnection() {
+        logConsole('CONN', 'Running connection diagnostics...', true);
+        updatePollingStats();
+
+        const t1 = Date.now();
+        try {
+            const res = await fetch(`${AGGREGATOR_URL}/getmatchsnapshot`, { method: 'GET', cache: 'no-cache' });
+            const lat = Date.now() - t1;
+            snapshotStatus.ok = res.ok;
+            snapshotStatus.latency = lat;
+            logConsole('CONN', `Snapshot endpoint ${res.ok ? 'OK' : 'FAIL'} (${lat}ms)`, res.ok);
+        } catch (e) {
+            snapshotStatus.ok = false;
+            snapshotStatus.latency = -1;
+            logConsole('CONN', `Snapshot endpoint ERROR: ${e.message}`, false);
+        }
+
+        const t2 = Date.now();
+        try {
+            const res = await fetch(`${AGGREGATOR_URL}/overlaycommand`, { method: 'GET', cache: 'no-cache' });
+            const lat = Date.now() - t2;
+            commandStatus.ok = res.ok;
+            commandStatus.latency = lat;
+            logConsole('CONN', `Command endpoint GET ${res.ok ? 'OK' : 'FAIL'} (${lat}ms)`, res.ok);
+        } catch (e) {
+            try {
+                const res = await fetch(`${AGGREGATOR_URL}/overlaycommand`, { method: 'OPTIONS', cache: 'no-cache' });
+                const lat = Date.now() - t2;
+                commandStatus.ok = res.ok;
+                commandStatus.latency = lat;
+                logConsole('CONN', `Command endpoint OPTIONS ${res.ok ? 'OK' : 'FAIL'} (${lat}ms)`, res.ok);
+            } catch (e2) {
+                commandStatus.ok = false;
+                commandStatus.latency = -1;
+                logConsole('CONN', `Command endpoint ERROR: ${e2.message}`, false);
+            }
+        }
+
+        updateConnectionDisplay();
+        updatePollingStats();
+    }
+
+    function logCommand(cmd) {
+        const container = document.getElementById("commandLogContainer");
+        if (!container) return;
+        const line = document.createElement("div");
+        const time = new Date().toLocaleTimeString('es-ES', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        line.textContent = `${time} → ${cmd}`;
+        container.prepend(line);
+        while (container.children.length > 20) {
+            container.removeChild(container.lastChild);
+        }
+    }
+
+    const VALID_COMMANDS = new Set([
+        'showWinner','showMVP','showMVT',
+        'showTablaPartida','showTablaGeneral','showTablaDesafios',
+        'hideAll','firstKill','firstGrenade','teamEliminated','zone',
+        'extend_alert',
+        'hide_overlay','show_overlay',
+        'pause_tabla_desafios','resume_tabla_desafios',
+        'pause_tabla_general','resume_tabla_general',
+        'debug_on','debug_off',
+        'alert_firstKill_on',    'alert_firstKill_off',
+        'alert_firstGrenade_on', 'alert_firstGrenade_off',
+        'alert_teamEliminated_on','alert_teamEliminated_off',
+        'alert_zone_on',         'alert_zone_off',
+        'startFinalSeq',
+        'extend_final', 'pause_final', 'resume_final', 'next_final',
+        'seq_mode_manual', 'seq_mode_auto',
+        'utils_top3_on', 'utils_top3_off',
+        'set_display_mode',
+        'display_mode_individual', 'display_mode_team',
+        'ui_dropsRoutes_on',  'ui_dropsRoutes_off',
+        'ui_throwables_on',   'ui_throwables_off',
+        'ui_teamTable_on',    'ui_teamTable_off',
+        'col_pp_on',          'col_pp_off',
+        'col_total_on',       'col_total_off'
+    ]);
+
+    (function _checkModules() {
+        const required = ['OverlayBridge','OverlayConfig','OverlayBus'];
+        required.forEach(mod => {
+            if (!window[mod]) {
+                console.warn(`[OVERLAY CONTROL] ⚠️ ${mod} no cargado — algunas funciones pueden fallar.`);
+                logConsole('WARN', `${mod} no disponible`, false);
+            }
+        });
+        if (typeof BroadcastChannel === 'undefined') {
+            const msg = 'BroadcastChannel no soportado en este navegador/entorno. Los overlays esclavos no recibirán comandos.';
+            console.error('[OVERLAY CONTROL] ' + msg);
+            alert('⚠️ ' + msg);
+        }
+    })();
+
+    const _DOM = {
+        commandLogContainer: document.getElementById('commandLogContainer'),
+        consoleContainer:    document.getElementById('consoleContainer'),
+    };
+
+    async function sendOverlayCommand(cmd, extraPayload) {
+        cmd = String(cmd).trim();  
+        if (!VALID_COMMANDS.has(cmd)) {
+            logConsole('CMD', `REJECTED invalid command: ${cmd}`, false);
+            console.warn('[OVERLAY CONTROL] Comando inválido rechazado:', cmd);
+            return;
+        }
+
+        const now = Date.now();
+        const NO_RATE_LIMIT = new Set([
+            'show_overlay',
+            'hide_overlay'
+        ]);
+
+        if (!NO_RATE_LIMIT.has(cmd)) {
+            if (now - lastCmdTimeGeneral < CMD_DELAY) {
+                const msg = `CMD BLOCKED (rate limit) ${cmd}`;
+                console.log(msg);
+                logConsole('CMD', msg, false);
+                return;
+            }
+            lastCmdTimeGeneral = now;
+        }
+
+        const uniqueTs = Date.now() * 1000 + performance.now();
+        const payload = Object.assign({ command: cmd, cmd: cmd, timestamp: uniqueTs, _source: 'overlay_control' }, extraPayload || {});
+
+        // lsPayload debe incluir los datos semánticos del extraPayload (ej: mode)
+        const lsPayload = JSON.stringify(Object.assign({ command: cmd, timestamp: uniqueTs, _source: 'overlay_control' }, extraPayload || {}));
+        try {
+            localStorage.setItem('overlay_manual_cmd', lsPayload);
+        } catch(e) {
+            logConsole('CMD', `localStorage error: ${e.message}`, false);
+        }
+        if (window.OverlayBridge && typeof OverlayBridge.dispatch === 'function') {
+            try { OverlayBridge.dispatch(payload); }
+            catch(e) { logConsole('CMD', `OverlayBridge.dispatch error: ${e.message}`, false); }
+        }
+
+        console.log('[OVERLAY_CONTROL SEND]', cmd, uniqueTs);
+
+        const MAX_RETRY = 3;
+        const RETRY_DELAY = 500;
+        let attempt = 0;
+
+        const trySend = async () => {
+            attempt++;
+            try {
+                logConsole('CMD', `Sending ${cmd}${attempt > 1 ? ` (attempt ${attempt})` : ''}`, true);
+                const response = await fetch(`${AGGREGATOR_URL}/overlaycommand`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                if (response.ok) {
+                    logConsole('CMD', `ACK ${cmd}`, true);
+                    logCommand(cmd);
+                    lastCommandTime = Date.now();
+                    updatePollingStats();
+                    return;
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (err) {
+                logConsole('CMD', `FAILED ${cmd} (attempt ${attempt}): ${err.message}`, false);
+                if (attempt < MAX_RETRY) {
+                    logConsole('CMD', `Retry in ${RETRY_DELAY}ms...`, false);
+                    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+                    return trySend();
+                } else {
+                    logConsole('CMD', `GIVE UP ${cmd} after ${MAX_RETRY} attempts`, false);
+                    console.warn("Overlay command error after retries:", err);
+                }
+            }
+        };
+
+        await trySend();
+    }
+
+    if (!window.OverlayConfig) {
+        window.OverlayConfig = {
+            _data:{}, _listeners:[],
+            get() { return this._data; },
+            set(patch) {
+                for (const [cat, vals] of Object.entries(patch))
+                    this._data[cat] = Object.assign(this._data[cat] || {}, vals);
+                this._listeners.forEach(fn => fn(this._data));
+                try { localStorage.setItem('overlayConfig', JSON.stringify(this._data)); } catch(e){}
+            },
+            subscribe(fn) { this._listeners.push(fn); }
+        };
+        try {
+            const s = localStorage.getItem('overlayConfig');
+            if (s) OverlayConfig._data = JSON.parse(s);
+        } catch(e){}
+    }
+
+    const debugToggle = document.getElementById('debugToggle');
+    const debugPanel  = document.getElementById('debugPanel');
+
+    function applyDebugMode(active) {
+        debugPanel.classList.toggle('visible', active);
+        localStorage.setItem('debugMode', active ? 'true' : 'false');
+    }
+    const initDebug = localStorage.getItem('debugMode') === 'true';
+    debugToggle.checked = initDebug;
+    applyDebugMode(initDebug);
+
+    const config = window.OverlayConfig;
+
+    // Seed column visibility defaults if not already stored
+    (function initColumnDefaults() {
+        const cur = config.get();
+        if (!cur.columns || cur.columns.showPP === undefined || cur.columns.showTotal === undefined) {
+            config.set({ columns: { showPP: true, showTotal: true } });
+        }
+        const colCur = config.get().columns || {};
+        const ppEl = document.getElementById('togglePP');
+        const totEl = document.getElementById('toggleTotal');
+        if (ppEl) ppEl.checked = colCur.showPP !== false;
+        if (totEl) totEl.checked = colCur.showTotal !== false;
+    })();
+
+    function updateUIFromConfig() {
+        const cur = config.get();
+        document.querySelectorAll('input[type="checkbox"][data-category]').forEach(cb => {
+            const c = cb.dataset.category, k = cb.dataset.key;
+            if (cur[c] && cur[c][k] !== undefined) {
+                if (c === 'display' && k === 'displayMode') {
+                    cb.checked = (cur[c][k] === 'individual');
+                } else {
+                    cb.checked = cur[c][k];
+                }
+            }
+        });
+    }
+    config.subscribe(updateUIFromConfig);
+    document.querySelectorAll('input[type="checkbox"][data-category]').forEach(cb => {
+        cb.addEventListener('change', function() {
+            config.set({ [this.dataset.category]: { [this.dataset.key]: this.checked } });
+            try {
+                localStorage.setItem('overlay_config_update', JSON.stringify({
+                    category:  this.dataset.category,
+                    key:       this.dataset.key,
+                    value:     this.checked,
+                    timestamp: Date.now()
+                }));
+            } catch(e) {}
+            if (this.dataset.category === 'tables' && this.dataset.key === 'teamBars') {
+                sendOverlayCommand(this.checked ? 'show_overlay' : 'hide_overlay');
+            }
+            const alertKeys = ['firstKill','firstGrenade','teamEliminated','zone'];
+            if (this.dataset.category === 'alerts' && alertKeys.includes(this.dataset.key)) {
+                const suffix = this.checked ? '_on' : '_off';
+                sendOverlayCommand('alert_' + this.dataset.key + suffix);
+            }
+            if (this.dataset.category === 'columns') {
+                const colCmd = this.dataset.key === 'showPP' ? 'col_pp' : 'col_total';
+                sendOverlayCommand(this.checked ? colCmd + '_on' : colCmd + '_off');
+            }
+        });
+    });
+
+    const displayModeToggle = document.getElementById('displayModeToggle');
+    if (displayModeToggle) {
+        displayModeToggle.addEventListener('change', function() {
+            const value = this.checked ? 'individual' : 'team';
+            config.set({ display: { displayMode: value } });
+            try {
+                localStorage.setItem('overlay_config_update', JSON.stringify({
+                    category: 'display',
+                    key: 'displayMode',
+                    value: value,
+                    timestamp: Date.now()
+                }));
+            } catch(e) {}
+            const modePayload = { command: 'set_display_mode', mode: value };
+            // Un solo punto de envío: sendOverlayCommand ya llama OverlayBridge.dispatch internamente
+            sendOverlayCommand('set_display_mode', modePayload);
+        });
+        const cur = config.get();
+        if (cur.display && cur.display.displayMode !== undefined) {
+            displayModeToggle.checked = (cur.display.displayMode === 'individual');
+        } else {
+            displayModeToggle.checked = false;
+            config.set({ display: { displayMode: 'team' } });
+        }
+    }
+    const activeOverlayDisplay = document.getElementById('activeOverlayDisplay');
+    const activeOverlayLabel   = document.getElementById('activeOverlayLabel');
+
+    let setActiveOverlay = function(name) {
+        if (name) {
+            activeOverlayDisplay.classList.add('live');
+            activeOverlayLabel.textContent = '● ' + name;
+        } else {
+            activeOverlayDisplay.classList.remove('live');
+            activeOverlayLabel.textContent = 'Sin overlay activo';
+        }
+    };
+
+    const overlayTimerDisplay  = document.getElementById('overlayTimerDisplay');
+    const overlayDurationInput = document.getElementById('overlayDuration');
+    const addFiveBtn           = document.getElementById('addFiveBtn');
+    let overlayTimerInterval = null, overlayTimerRemaining = 0;
+
+    let _timerPaused = false;
+
+    function startOverlayTimer(seconds) {
+        if (overlayTimerInterval) clearInterval(overlayTimerInterval);
+        _timerPaused = false;
+        overlayTimerRemaining = seconds;
+        _updateTimerDisplay();
+        overlayTimerInterval = setInterval(() => {
+            if (_timerPaused) return; 
+            overlayTimerRemaining--;
+            _updateTimerDisplay();
+            if (overlayTimerRemaining <= 0) {
+                clearInterval(overlayTimerInterval); overlayTimerInterval = null;
+                overlayTimerDisplay.classList.remove('urgent');
+                overlayTimerDisplay.textContent = '—';
+                sendManualCommand('hideAll');
+            }
+        }, 1000);
+    }
+    function _updateTimerDisplay() {
+        const m = Math.floor(overlayTimerRemaining / 60), s = overlayTimerRemaining % 60;
+        overlayTimerDisplay.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        overlayTimerDisplay.classList.toggle('urgent', overlayTimerRemaining <= 10 && overlayTimerRemaining > 0);
+    }
+    addFiveBtn.addEventListener('click', () => {
+        if (overlayTimerInterval) { overlayTimerRemaining += 5; _updateTimerDisplay(); }
+    });
+
+    const overlayLabels = {
+        showWinner:'wwcd_overlay',
+        showMVP:'final_aniversario',
+        showMVT:'final_aniversario',
+        showTablaPartida:'final_aniversario',
+        showTablaDesafios:'tabla_desafios',
+        showTablaGeneral:'tabla_final_aniversario',
+        hideAll:null
+    };
+
+    function sendManualCommand(cmd) {
+        sendOverlayCommand(cmd); 
+        setActiveOverlay(overlayLabels[cmd] || null);
+    }
+
+    let _currentTablaOverlay = null; 
+
+    ['showTablaDesafios','showTablaGeneral'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('click', () => {
+            const otherActive = _currentTablaOverlay && _currentTablaOverlay !== id;
+            _currentTablaOverlay = id;
+            _timerPaused = false;
+            const pauseBtn = document.getElementById('pauseTablaBtn');
+            if (pauseBtn) { pauseBtn.disabled = false; pauseBtn.textContent = '⏸ Pausar'; pauseBtn.classList.remove('paused'); }
+
+            if (otherActive) {
+                sendOverlayCommand('hideAll');
+                setActiveOverlay(null);
+                el.disabled = true;
+                setTimeout(() => {
+                    el.disabled = false;
+                    sendManualCommand(id);
+                    startOverlayTimer(parseInt(overlayDurationInput.value, 10) || 30);
+                }, 400); 
+            } else {
+                sendManualCommand(id);
+                startOverlayTimer(parseInt(overlayDurationInput.value, 10) || 30);
+            }
+        });
+    });
+
+    const pauseTablaBtn = document.getElementById('pauseTablaBtn');
+    if (pauseTablaBtn) {
+        pauseTablaBtn.addEventListener('click', () => {
+            if (!_currentTablaOverlay) return;
+            _timerPaused = !_timerPaused;
+            pauseTablaBtn.classList.toggle('paused', _timerPaused);
+            pauseTablaBtn.textContent = _timerPaused ? '▶ Reanudar' : '⏸ Pausar';
+            if (_currentTablaOverlay === 'showTablaDesafios') {
+                sendOverlayCommand(_timerPaused ? 'pause_tabla_desafios' : 'resume_tabla_desafios');
+            } else if (_currentTablaOverlay === 'showTablaGeneral') {
+                sendOverlayCommand(_timerPaused ? 'pause_tabla_general' : 'resume_tabla_general');
+            }
+        });
+    }
+    function formatTime(s) {
+        return `${String(Math.floor(s / 60)).padStart(2,'0')}:${String(s % 60).padStart(2,'0')}`;
+    }
+
+    const MapEngine = (function() {
+        const mapCanvas    = document.getElementById('mapCanvas');
+        const circleCanvas = document.getElementById('circleCanvas');
+        const arcCanvas    = document.getElementById('arcCanvas');
+        const playerCanvas = document.getElementById('playerCanvas');
+        const zoneCanvas   = document.getElementById('zoneCanvas');
+        const mapCtx    = mapCanvas.getContext('2d',    { willReadFrequently:false });
+        const circleCtx = circleCanvas.getContext('2d', { willReadFrequently:false });
+        const arcCtx    = arcCanvas.getContext('2d',    { willReadFrequently:false });
+        const playerCtx = playerCanvas.getContext('2d', { willReadFrequently:false });
+        const zoneCtx   = zoneCanvas.getContext('2d',   { willReadFrequently:false });
+
+        const container              = document.getElementById('container');
+        const mapButtons             = document.querySelectorAll('.map-button[data-map]');
+        const toggleEliminatedButton = document.getElementById('toggleEliminatedButton');
+        const closeTeamsContainer    = document.getElementById('closeTeamsContainer');
+
+        let offsetX = 0, offsetY = 0;
+        let isDragging = false, startX = 0, startY = 0;
+        let zoomLevel = 1;
+        let mapLoaded = false;
+        let maxCoordinate = 800000, scale = 1;
+        const backgroundImage = new Image();
+
+        let circleStatus = 0, circleIndex = 0;
+        let countdownTime = 0, animationStartTime = null;
+        let currentAnimatingCircle = null, animationRequestId = null;
+        let completedCircles = new Set();
+
+        let playerPositions = {}, playerLiveStates = {};
+        let allTeams = new Set(), teamPositions = {};
+        let teamVisibility = {}, teamNames = {};
+        let showEliminated = false;
+        let currentMapName = 'ERANGEL';
+        let CircleTimeline = [], lastCircleIndex = 0, lastCircleStatus = 0, lastCircleArray = [];
+        const textWidthCache = new Map();
+
+        let _dirtyMap = true, _dirtyCircles = true, _dirtyPlayers = true, _dirtyZones = true;
+
+        let _currentCircleArray = [], _currentPlayerData = null;
+        let _currentGameTimeSec = 0;
+        let _scaledCircleCache  = [];
+        let _scaledPlayerCache  = [];
+
+        const trajectoryPathCache = new Map(); 
+
+        const mapSizes = { 'ERANGEL':807800,'RONDO':807800,'MIRAMAR':807800,'SANHOK':403000,'VIKENDI':604000 };
+        const specificColors = [
+            '#3d85c6','#068242','#841111','#C24E00','#83004E','#54289A','#496C82','#164815','#34594a',
+            '#1E187C','#99823D','#9E1CA8','#660033','#595900','#744960','#6A1B1E','#6c6480','#624C79',
+            '#763A3A','#5C1538'
+        ];
+        const teamColors = {};
+        const images = {};
+        const mapImageUrls = {
+            'ERANGEL':'https://i.imgur.com/aI9zhOA.jpeg','RONDO':'https://i.imgur.com/5aby4vt.jpeg',
+            'MIRAMAR':'https://i.imgur.com/xLV60KA.jpeg','SANHOK':'https://i.imgur.com/bmtNy4e.jpeg',
+            'VIKENDI':'https://i.imgur.com/pRlpqBL.jpeg'
+        };
+        const iconImageUrls = {
+            0:'',1:'https://i.imgur.com/tBHiiiQ.png',2:'https://i.imgur.com/EWb1fuA.png',
+            3:'https://i.imgur.com/0USJbjI.png',4:'https://i.imgur.com/iBfiG4B.png',5:'',6:''
+        };
+        const MAX_TRAJECTORY_POINTS = 250;
+
+        for (const ls in iconImageUrls) {
+            if (!iconImageUrls[ls]) continue;
+            const img = new Image(); img.src = iconImageUrls[ls];
+            img.onload = () => { images[ls] = img; };
+        }
+        (function() {
+            let ci = 0;
+            for (let tid = 3; tid <= 22; tid++) {
+                const k = tid.toString();
+                if (!teamColors[k]) { teamColors[k] = specificColors[ci] || '#FFFFFF'; ci++; }
+            }
+        })();
+
+        function _rebuildScaledCaches() {
+            _scaledCircleCache = _currentCircleArray.map(c => ({
+                sx: parseFloat(c.X) * scale,
+                sy: parseFloat(c.Y) * scale,
+                sr: parseFloat(c.Size) * scale,
+                raw: c
+            }));
+            if (!_currentPlayerData || !_currentPlayerData.TotalPlayerList) {
+                _scaledPlayerCache = [];
+                return;
+            }
+            _scaledPlayerCache = _currentPlayerData.TotalPlayerList.map(p => ({
+                sx:       parseFloat(p.location.x) * scale,
+                sy:       parseFloat(p.location.y) * scale,
+                name:     p.playerName,
+                tid:      p.teamId.toString(),
+                ls:       p.liveState,
+                isOut:    !!p.isOutsideBlueCircle,
+                teamName: p.teamName || null,
+                rx:       parseFloat(p.location.x),
+                ry:       parseFloat(p.location.y),
+                rz:       parseFloat(p.location.z)
+            }));
+        }
+
+        function resizeCanvases() {
+            const r  = container.getBoundingClientRect();
+            const cx = r.width / 2, cy = r.height / 2;
+            const mpx = zoomLevel > 0 ? (cx - offsetX) / zoomLevel / scale : 0;
+            const mpy = zoomLevel > 0 ? (cy - offsetY) / zoomLevel / scale : 0;
+            const dpr = window.devicePixelRatio || 1;
+            const sz  = Math.max(1024, Math.min(2048, Math.floor(r.width * dpr)));
+            [mapCanvas, circleCanvas, arcCanvas, playerCanvas, zoneCanvas].forEach(c => { c.width = sz; c.height = sz; });
+            scale = mapCanvas.width / maxCoordinate;
+            offsetX = cx - mpx * scale * zoomLevel;
+            offsetY = cy - mpy * scale * zoomLevel;
+            limitPos(); textWidthCache.clear();
+            _rebuildScaledCaches();
+            _dirtyMap = _dirtyCircles = _dirtyPlayers = _dirtyZones = true;
+        }
+        window.addEventListener('resize', resizeCanvases);
+
+        function limitPos() {
+            if (zoomLevel <= 1) { offsetX = 0; offsetY = 0; return; }
+            const r = container.getBoundingClientRect();
+            offsetX = Math.min(0, Math.max(Math.min(0, r.width  - mapCanvas.width  * zoomLevel), offsetX));
+            offsetY = Math.min(0, Math.max(Math.min(0, r.height - mapCanvas.height * zoomLevel), offsetY));
+        }
+
+        function adjustZoom(cx, cy, nz) {
+            const oz = zoomLevel;
+            zoomLevel = Math.min(Math.max(nz, 1), 9);
+            if (zoomLevel !== oz) {
+                const ratio = zoomLevel / oz;
+                offsetX = cx - ratio * (cx - offsetX);
+                offsetY = cy - ratio * (cy - offsetY);
+                limitPos(); textWidthCache.clear();
+                _dirtyMap = _dirtyCircles = _dirtyPlayers = _dirtyZones = true;
+            }
+            container.classList.toggle('no-pan', zoomLevel <= 1);
+        }
+
+        container.addEventListener('wheel', e => {
+            e.preventDefault();
+            const rc = container.getBoundingClientRect();
+            adjustZoom(e.clientX - rc.left, e.clientY - rc.top, zoomLevel - e.deltaY * 0.003);
+        }, { passive:false });
+
+        container.addEventListener('mousedown', e => {
+            if (zoomLevel <= 1) { isDragging = false; return; }
+            isDragging = true;
+            startX = e.clientX - offsetX; startY = e.clientY - offsetY;
+            container.style.cursor = 'grabbing';
+        });
+        container.addEventListener('mousemove', e => {
+            if (!isDragging) return;
+            offsetX = e.clientX - startX; offsetY = e.clientY - startY;
+            limitPos(); _dirtyMap = _dirtyCircles = _dirtyPlayers = _dirtyZones = true;
+        });
+        container.addEventListener('mouseup',    () => { isDragging = false; if (zoomLevel > 1) container.style.cursor = 'grab'; });
+        container.addEventListener('mouseleave', () => { isDragging = false; if (zoomLevel > 1) container.style.cursor = 'grab'; });
+
+        container.addEventListener('dblclick', () => {
+            zoomLevel = 1; offsetX = 0; offsetY = 0;
+            container.classList.add('no-pan');
+            container.style.cursor = 'default';
+            textWidthCache.clear();
+            _dirtyMap = _dirtyCircles = _dirtyPlayers = _dirtyZones = true;
+        });
+
+        async function loadMap(mapName) {
+            currentMapName = mapName;
+            maxCoordinate  = mapSizes[mapName] || 800000;
+            const url = mapImageUrls[mapName];
+            if (!url) { alert('Mapa no soportado'); return; }
+            backgroundImage.onload = () => {
+                resizeCanvases(); mapLoaded = true;
+                _dirtyMap = _dirtyCircles = _dirtyPlayers = _dirtyZones = true;
+            };
+            backgroundImage.onerror = () => console.warn('Error al cargar mapa');
+            backgroundImage.src = url;
+        }
+
+        mapButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const name = btn.getAttribute('data-map');
+                loadMap(name);
+                ZoneManager.onMapChange(name);
+                resetAlerts();
+            });
+        });
+
+        function drawMap() {
+            mapCtx.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
+            if (!mapLoaded) {
+                mapCtx.fillStyle = '#333';
+                mapCtx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
+                return;
+            }
+            mapCtx.save();
+            mapCtx.translate(offsetX, offsetY);
+            mapCtx.scale(zoomLevel, zoomLevel);
+            mapCtx.drawImage(backgroundImage, 0, 0, mapCanvas.width, mapCanvas.height);
+            mapCtx.restore();
+        }
+
+        function drawCircles() {
+            circleCtx.clearRect(0, 0, circleCanvas.width, circleCanvas.height);
+            if (!_scaledCircleCache.length) return;
+            const lw = Math.max(1.5, Math.min(6, 8 / zoomLevel));
+            circleCtx.save();
+            circleCtx.translate(offsetX, offsetY);
+            circleCtx.scale(zoomLevel, zoomLevel);
+            for (let i = 0; i < _scaledCircleCache.length; i++) {
+                const c = _scaledCircleCache[i];
+                let color = 'rgba(0,255,0,0.5)';
+                if (completedCircles.has(i)) color = 'rgba(0,0,255,0.5)';
+                else if (i === (circleIndex - 1) && circleStatus === 2) color = 'rgba(0,255,0,0.8)';
+                circleCtx.beginPath();
+                circleCtx.arc(c.sx, c.sy, c.sr, 0, 2 * Math.PI);
+                circleCtx.strokeStyle = color; circleCtx.lineWidth = lw; circleCtx.stroke();
+            }
+            circleCtx.restore();
+        }
+
+        function animateArc(timestamp) {
+            if (!animationStartTime) animationStartTime = timestamp;
+            const progress = Math.min((timestamp - animationStartTime) / countdownTime, 1);
+            if (currentAnimatingCircle) {
+                const cached = _scaledCircleCache.find(c => c.raw === currentAnimatingCircle);
+                const sx = cached ? cached.sx : parseFloat(currentAnimatingCircle.X) * scale;
+                const sy = cached ? cached.sy : parseFloat(currentAnimatingCircle.Y) * scale;
+                const sr = cached ? cached.sr : parseFloat(currentAnimatingCircle.Size) * scale;
+                arcCtx.clearRect(0, 0, arcCanvas.width, arcCanvas.height);
+                arcCtx.save();
+                arcCtx.translate(offsetX, offsetY);
+                arcCtx.scale(zoomLevel, zoomLevel);
+                arcCtx.beginPath();
+                arcCtx.arc(sx, sy, sr + 5, -Math.PI/2, -Math.PI/2 + progress * 2 * Math.PI);
+                arcCtx.strokeStyle = 'blue'; arcCtx.lineWidth = Math.max(2, Math.min(8, 10 / zoomLevel)); arcCtx.stroke();
+                arcCtx.restore();
+            }
+            if (progress < 1) {
+                animationRequestId = requestAnimationFrame(animateArc);
+            } else {
+                arcCtx.clearRect(0, 0, arcCanvas.width, arcCanvas.height);
+                if (currentAnimatingCircle) {
+                    const ci = _currentCircleArray.indexOf(currentAnimatingCircle);
+                    if (ci !== -1) completedCircles.add(ci);
+                }
+                _dirtyCircles = true;
+                animationStartTime = null; currentAnimatingCircle = null; animationRequestId = null;
+            }
+        }
+
+        function updateCircleTimeline(circleInfo, circleArray) {
+            const ci = parseInt(circleInfo.CircleIndex, 10);
+            const cs = parseInt(circleInfo.CircleStatus, 10);
+            const gt = parseInt(circleInfo.GameTime, 10);
+            const changed = ci !== lastCircleIndex || cs !== lastCircleStatus ||
+                JSON.stringify(circleArray) !== JSON.stringify(lastCircleArray);
+            if (!changed) return;
+            const cur = circleArray[ci - 1];
+            if (cur) {
+                let entry = CircleTimeline.find(e => e.index === ci);
+                if (!entry) {
+                    entry = { index:ci, x:parseFloat(cur.X), y:parseFloat(cur.Y), z:0,
+                              size:parseFloat(cur.Size), timeStart:gt, timeShrinkStart:null, timeShrinkEnd:null };
+                    CircleTimeline.push(entry);
+                }
+                if (cs === 2 && !entry.timeShrinkStart) entry.timeShrinkStart = gt;
+                else if (cs !== 2 && entry.timeShrinkStart && !entry.timeShrinkEnd) entry.timeShrinkEnd = gt;
+            }
+            lastCircleIndex = ci; lastCircleStatus = cs;
+            lastCircleArray = JSON.parse(JSON.stringify(circleArray));
+        }
+
+        function rebuildTrajectoryPath(playerName, points) {
+            if (!points || points.length < 2) {
+                trajectoryPathCache.delete(playerName);
+                return;
+            }
+            const path = new Path2D();
+            path.moveTo(points[0].xReal * scale, points[0].yReal * scale);
+            for (let i = 1; i < points.length; i++) {
+                path.lineTo(points[i].xReal * scale, points[i].yReal * scale);
+            }
+            trajectoryPathCache.set(playerName, path);
+        }
+
+        function drawPlayers(timestamp) {
+            playerCtx.clearRect(0, 0, playerCanvas.width, playerCanvas.height);
+            teamPositions = {};
+            if (!_scaledPlayerCache.length) return;
+
+            const invZ = 1 / zoomLevel;
+            const left   = -offsetX * invZ;
+            const right  = (playerCanvas.width - offsetX) * invZ;
+            const top    = -offsetY * invZ;
+            const bottom = (playerCanvas.height - offsetY) * invZ;
+
+            const pointSize    = Math.max(2,  Math.min(15, 15 * invZ));
+            const fontSize     = Math.max(2,  Math.min(15, 18 * invZ));
+            const trajW        = Math.max(1,  Math.min(4,  2  * invZ));
+            const outlineBlueW = Math.max(1,  Math.min(5,  5  * invZ));
+            const outlineRedW  = Math.max(1,  Math.min(5,  5  * invZ));
+            const extraRing    = Math.max(1,  Math.min(5,  3  * invZ));
+            const nameOffY     = Math.max(1,  Math.min(5,  15 * invZ));
+            const fsk          = Math.round(fontSize * 10) / 10;
+            const iconSz       = fontSize * 1.2;
+            const pX           = fontSize * 0.4;
+            const pY           = fontSize * 0.2;
+            const dotFont      = `${pointSize}px Arial`;
+            const nameFont     = `${fontSize}px Arial`;
+            const ts           = timestamp || 0;
+
+            playerCtx.save();
+            playerCtx.translate(offsetX, offsetY);
+            playerCtx.scale(zoomLevel, zoomLevel);
+            playerCtx.font = nameFont;
+            const textStrokeWidth = Math.max(0.8, 1.8 / zoomLevel);
+            playerCtx.lineWidth = textStrokeWidth;
+            playerCtx.lineJoin = 'round';
+            playerCtx.lineCap = 'round';
+
+            for (let i = 0; i < _scaledPlayerCache.length; i++) {
+                const p = _scaledPlayerCache[i];
+                const sx = p.sx, sy = p.sy;
+
+                const inViewport = !(sx < left || sx > right || sy < top || sy > bottom);
+
+                const ls = p.ls, tid = p.tid;
+
+                if (!showEliminated && ls === 5) continue;
+
+                if (!teamPositions[tid]) teamPositions[tid] = { x: p.rx, y: p.ry, teamId: tid, live: false };
+                if (ls <= 4) teamPositions[tid].live = true;
+
+                if (!inViewport) continue; 
+
+                if (!teamColors[tid]) {
+                    const n = parseInt(tid, 10);
+                    teamColors[tid] = (n >= 3 && n <= 22) ? specificColors[n - 3] : '#808080';
+                }
+                if (!teamNames[tid]) teamNames[tid] = p.teamName || `Team ${tid}`;
+
+                const pname = p.name;
+                if (!playerPositions[pname]) playerPositions[pname] = {
+                    positions: [],        
+                    exportPositions: [], 
+                    isRecording: false,   
+                    teamId: tid
+                };
+                const pp = playerPositions[pname];
+
+                if (pp.isRecording) {
+                    const ts = _currentGameTimeSec;
+                    const arr = pp.positions;
+                    const last = arr.length > 0 ? arr[arr.length - 1] : null;
+                    if (!last) {
+                        arr.push({ xReal:p.rx, yReal:p.ry, zReal:p.rz });
+                        rebuildTrajectoryPath(pname, arr);
+                    } else {
+                        const dx = p.rx - last.xReal, dy = p.ry - last.yReal, dz = p.rz - last.zReal;
+                        if (dx*dx + dy*dy + dz*dz >= 40000) {
+                            arr.push({ xReal:p.rx, yReal:p.ry, zReal:p.rz });
+                            if (arr.length > MAX_TRAJECTORY_POINTS) arr.shift();
+                            rebuildTrajectoryPath(pname, arr);
+                        }
+                    }
+                    const exp = pp.exportPositions;
+                    const lastExp = exp.length > 0 ? exp[exp.length - 1] : null;
+                    if (!lastExp) {
+                        exp.push({ xReal:p.rx, yReal:p.ry, zReal:p.rz, timestamp:ts, liveState:ls });
+                    } else {
+                        const dx2 = p.rx - lastExp.xReal, dy2 = p.ry - lastExp.yReal;
+                        if (dx2*dx2 + dy2*dy2 >= 40000 || ls !== lastExp.liveState) {
+                            exp.push({ xReal:p.rx, yReal:p.ry, zReal:p.rz, timestamp:ts, liveState:ls });
+                        }
+                    }
+                }
+
+                const tv = teamVisibility[tid] || (teamVisibility[tid] = { showIcons:true, showTrajectory:false });
+                if (!tv.showIcons) continue;
+
+                if (tv.showTrajectory) {
+                    const path = trajectoryPathCache.get(pname);
+                    if (path) {
+                        playerCtx.save();
+                        playerCtx.strokeStyle = teamColors[tid];
+                        playerCtx.lineWidth = trajW;
+                        playerCtx.lineJoin = 'round';
+                        playerCtx.lineCap = 'round';
+                        playerCtx.stroke(path);
+                        playerCtx.restore();
+                    }
+                }
+
+                if (p.isOut && ls !== 5) {
+                    const pa = 0.5 + 0.5 * Math.sin(ts / 90);
+                    playerCtx.beginPath(); playerCtx.arc(sx, sy, pointSize + extraRing, 0, 2*Math.PI);
+                    playerCtx.strokeStyle = `rgba(0,0,255,${pa})`; playerCtx.lineWidth = outlineBlueW; playerCtx.stroke();
+                }
+
+                playerCtx.beginPath(); playerCtx.arc(sx, sy, pointSize, 0, 2*Math.PI);
+                if (ls === 5) {
+                    playerCtx.fillStyle = 'rgba(128,128,128,0.5)'; playerCtx.fill();
+                    playerCtx.strokeStyle = teamColors[tid]; playerCtx.lineWidth = 2 * invZ; playerCtx.stroke();
+                } else {
+                    playerCtx.fillStyle = teamColors[tid] || '#808080'; playerCtx.fill();
+                }
+
+                playerCtx.fillStyle = '#FFF';
+                playerCtx.font = dotFont;
+                playerCtx.textAlign = 'center';
+                playerCtx.textBaseline = 'middle';
+                playerCtx.lineWidth = textStrokeWidth;
+                playerCtx.strokeStyle = '#000';
+                playerCtx.strokeText(tid, sx, sy);
+                playerCtx.fillText(tid, sx, sy);
+
+                const textY = sy + pointSize + nameOffY;
+                const ck = `${pname}_${fsk}`;
+                let tw = textWidthCache.get(ck);
+                if (!tw) {
+                    playerCtx.font = nameFont;
+                    tw = playerCtx.measureText(pname).width;
+                    textWidthCache.set(ck, tw);
+                }
+                const totalW = iconSz + pX * 3 + tw;
+                const rectX  = sx - totalW / 2, rectY = textY - fontSize / 2 - pY, rectH = fontSize + pY * 2;
+
+                if (ls === 4) {
+                    const pa = 0.5 + 0.5 * Math.sin(ts / 90);
+                    playerCtx.beginPath(); playerCtx.rect(rectX, rectY, totalW, rectH);
+                    playerCtx.strokeStyle = `rgba(255,0,0,${pa})`; playerCtx.lineWidth = outlineRedW; playerCtx.stroke();
+                }
+
+                playerCtx.globalAlpha = 0.7;
+                playerCtx.fillStyle = teamColors[tid] || '#000';
+                playerCtx.fillRect(rectX, rectY, totalW, rectH);
+                playerCtx.globalAlpha = 1;
+
+                const iconImg = images[ls];
+                if (iconImg && iconImg.complete && iconImageUrls[ls])
+                    playerCtx.drawImage(iconImg, rectX + pX, textY - iconSz / 2, iconSz, iconSz);
+
+                playerCtx.fillStyle = '#FFF';
+                playerCtx.font = nameFont;
+                playerCtx.textBaseline = 'middle';
+                playerCtx.textAlign = 'left';
+                playerCtx.lineWidth = textStrokeWidth;
+                playerCtx.strokeStyle = '#000';
+                playerCtx.strokeText(pname, rectX + pX + iconSz + pX, textY);
+                playerCtx.fillText(pname, rectX + pX + iconSz + pX, textY);
+            }
+
+            playerCtx.restore();
+            displayCloseTeams();
+        }
+
+        function displayCloseTeams() {
+            const teams = Object.values(teamPositions).filter(t => t.live);
+            const n = teams.length;
+            if (n < 2) { closeTeamsContainer.innerHTML = ''; return; }
+
+            const THRESH_WORLD = 30000;
+            const thresh2 = THRESH_WORLD * THRESH_WORLD;
+
+            const seen = new Set();
+            const frag = document.createDocumentFragment();
+
+            for (let i = 0; i < n; i++) {
+                const ti = teams[i];
+                for (let j = i + 1; j < n; j++) {
+                    const tj = teams[j];
+                    const pairKey = i * 10000 + j;
+                    if (seen.has(pairKey)) continue;
+                    seen.add(pairKey);
+                    const ddx = ti.x - tj.x, ddy = ti.y - tj.y;
+                    if (ddx * ddx + ddy * ddy <= thresh2) {
+                        const div = document.createElement('div');
+                        div.className = 'teamPairContainer';
+
+                        const leftSpan = document.createElement('span');
+                        leftSpan.className = 'team-badge';
+                        const leftCircle = document.createElement('span');
+                        leftCircle.className = 'team-color-circle';
+                        leftCircle.style.backgroundColor = teamColors[ti.teamId];
+                        leftCircle.textContent = ti.teamId;
+                        const leftName = document.createTextNode(' ' + (teamNames[ti.teamId] || 'Team ' + ti.teamId));
+                        leftSpan.appendChild(leftCircle);
+                        leftSpan.appendChild(leftName);
+
+                        const rightSpan = document.createElement('span');
+                        rightSpan.className = 'team-badge';
+                        const rightCircle = document.createElement('span');
+                        rightCircle.className = 'team-color-circle';
+                        rightCircle.style.backgroundColor = teamColors[tj.teamId];
+                        rightCircle.textContent = tj.teamId;
+                        const rightName = document.createTextNode(' ' + (teamNames[tj.teamId] || 'Team ' + tj.teamId));
+                        rightSpan.appendChild(rightCircle);
+                        rightSpan.appendChild(rightName);
+
+                        const arrow = document.createElement('span');
+                        arrow.textContent = ' ↔ ';
+                        arrow.style.fontWeight = 'bold';
+                        arrow.style.color = '#aaa';
+
+                        div.appendChild(leftSpan);
+                        div.appendChild(arrow);
+                        div.appendChild(rightSpan);
+                        frag.appendChild(div);
+                    }
+                }
+            }
+            closeTeamsContainer.innerHTML = '';
+            closeTeamsContainer.appendChild(frag);
+        }
+
+        toggleEliminatedButton.addEventListener('click', () => {
+            showEliminated = !showEliminated;
+            toggleEliminatedButton.textContent = showEliminated ? 'Ocultar Eliminados' : 'Mostrar Eliminados';
+            _dirtyPlayers = true;
+        });
+
+        function mainRenderLoop(ts) {
+            if (_dirtyMap)     { drawMap();     _dirtyMap     = false; }
+            if (_dirtyCircles) { drawCircles(); _dirtyCircles = false; }
+            if (_dirtyZones)   { ZoneManager.drawZones(); _dirtyZones = false; }
+            drawPlayers(ts);  
+            requestAnimationFrame(mainRenderLoop);
+        }
+
+        function processCircleInfo(circleInfo, circleArray) {
+            const gt   = parseInt(circleInfo.GameTime,       10);
+            if (!isNaN(gt)) _currentGameTimeSec = gt;
+            const ctr  = parseInt(circleInfo.Counter,        10);
+            const maxT = parseInt(circleInfo.MaxTime,        10);
+            const ncs  = parseInt(circleInfo.CircleStatus,   10);
+            const nci  = parseInt(circleInfo.CircleIndex,    10);
+
+            document.getElementById('gameTime').textContent     = formatTime(gt);
+            document.getElementById('circleStatus').textContent = circleInfo.CircleStatus;
+            document.getElementById('circleIndex').textContent  = nci;
+            document.getElementById('counter').textContent      = formatTime(ctr);
+            document.getElementById('maxTime').textContent      = formatTime(maxT);
+            document.getElementById('countdown').textContent    = formatTime(Math.max(0, maxT - ctr));
+
+            const prevStatus = circleStatus, prevIndex = circleIndex;
+            circleStatus = ncs; circleIndex = nci;
+            _currentCircleArray = circleArray;
+            _rebuildScaledCaches();
+            updateCircleTimeline(circleInfo, circleArray);
+            _dirtyCircles = true;
+
+            if (ncs === 2 && (prevStatus !== 2 || prevIndex !== nci)) {
+                if (animationRequestId) cancelAnimationFrame(animationRequestId);
+                const cc = circleArray[nci - 1];
+                if (cc) {
+                    currentAnimatingCircle = cc;
+                    countdownTime = Math.max(0, maxT - ctr) * 1000;
+                    animationStartTime = null;
+                    requestAnimationFrame(animateArc);
+                }
+            } else if (ncs !== 2 && prevStatus === 2) {
+                if (animationRequestId) { cancelAnimationFrame(animationRequestId); animationRequestId = null; }
+                arcCtx.clearRect(0, 0, arcCanvas.width, arcCanvas.height);
+                if (prevIndex > 0) completedCircles.add(prevIndex - 1);
+                _dirtyCircles = true;
+            }
+        }
+
+        return {
+            init() {
+                resizeCanvases();
+                container.classList.toggle('no-pan', zoomLevel <= 1);
+                requestAnimationFrame(mainRenderLoop);
+            },
+            loadMap,
+            redrawAll() { _dirtyMap = _dirtyCircles = _dirtyPlayers = _dirtyZones = true; },
+            processCircleInfo,
+            get scale()      { return scale; },
+            get zoomLevel()  { return zoomLevel; },
+            get offsetX()    { return offsetX; },
+            get offsetY()    { return offsetY; },
+            get teamNames()  { return teamNames; },
+            get teamColors() { return teamColors; },
+            setPlayerData(data) {
+                _currentPlayerData = data;
+                _rebuildScaledCaches();
+                _dirtyPlayers = true;
+            },
+            getPlayerData()     { return _currentPlayerData; },
+            setCircleArray(arr) { _currentCircleArray = arr; _rebuildScaledCaches(); _dirtyCircles = true; },
+            getCircleArray()    { return _currentCircleArray; },
+            get playerPositions()   { return playerPositions; },
+            get playerLiveStates()  { return playerLiveStates; },
+            set playerPositions(v)  { playerPositions = v; },
+            set playerLiveStates(v) { playerLiveStates = v; },
+            get textWidthCache()    { return textWidthCache; },
+            resetPositionTracking() {
+                playerPositions = {}; playerLiveStates = {};
+                allTeams.clear(); teamPositions = {};
+                completedCircles.clear(); CircleTimeline = [];
+                textWidthCache.clear(); _scaledPlayerCache = [];
+                trajectoryPathCache.clear();
+                _currentGameTimeSec = 0;
+            },
+            clearCanvases() {
+                _currentPlayerData = null; _scaledPlayerCache = [];
+                _currentCircleArray = []; _scaledCircleCache = [];
+                playerCtx.clearRect(0, 0, playerCanvas.width, playerCanvas.height);
+                circleCtx.clearRect(0, 0, circleCanvas.width, circleCanvas.height);
+                arcCtx.clearRect(0, 0, arcCanvas.width, arcCanvas.height);
+                zoneCtx.clearRect(0, 0, zoneCanvas.width, zoneCanvas.height);
+            },
+            setDirtyZones() { _dirtyZones = true; },
+            get currentGameTimeSec() { return _currentGameTimeSec; }
+        };
+    })();
+
+    let killInfo = {}, gameStartTime = new Date(), currentGameID = null;
+    let fetchingSnapshot = false, totalPlayerCount = 0;
+    let matchStats = { remainingPlayers:0, totalTeams:0, remainingTeams:0, totalEliminations:0 };
+    let alert1Triggered = false, alert2Triggered = false;
+    let autoFinalStep = 0, autoFinalDone = false;
+    let autoFinalUnlocked = false; 
+    let gameIDChangeTime = Date.now();    
+    const AUTO_FINAL_GRACE_MS = 20000; 
+
+    const alertSound1 = new Audio("https://ik.imagekit.io/osukaru/Ding%20-%20Sound%20Effect%20(HD).mp3");
+    const alertSound2 = new Audio("https://ik.imagekit.io/osukaru/The%20Price%20is%20Right%20Ding%20-%20Sound%20Effect%20(HD).mp3");
+    alertSound1.preload = alertSound2.preload = "auto";
+    let soundsEnabled = true;
+
+    document.addEventListener("click", () => {
+        alertSound1.play().then(() => alertSound1.pause()).catch(()=>{});
+        alertSound2.play().then(() => alertSound2.pause()).catch(()=>{});
+    }, { once:true });
+
+    function playAlertSound(type) {
+        if (!soundsEnabled) return;
+        const snd = type === 1 ? alertSound1 : alertSound2;
+        snd.currentTime = 0; snd.play().catch(()=>{});
+    }
+    document.getElementById('enableAlertSounds').addEventListener('change', function() { soundsEnabled = this.checked; });
+    document.getElementById('testAlert1Button').addEventListener('click', () => playAlertSound(1));
+    document.getElementById('testAlert2Button').addEventListener('click', () => playAlertSound(2));
+
+    function updateMatchStats() {
+        const data = MapEngine.getPlayerData();
+        if (!data || !data.TotalPlayerList) return;
+        const players = data.TotalPlayerList;
+        let alivePlayers = 0;
+        const aliveTeamSet = new Set(), allTeamSet = new Set();
+        for (let i = 0; i < players.length; i++) {
+            const p = players[i];
+            allTeamSet.add(p.teamId);
+            if (p.liveState <= 4) { alivePlayers++; aliveTeamSet.add(p.teamId); }
+        }
+        const elims = Object.keys(killInfo).length;
+        if (alivePlayers > totalPlayerCount) totalPlayerCount = alivePlayers;
+        document.getElementById('remainingPlayers').textContent       = alivePlayers;
+        document.getElementById('totalPlayerCountDisplay').textContent = totalPlayerCount || players.length;
+        document.getElementById('totalTeams').textContent             = allTeamSet.size;
+        document.getElementById('remainingTeams').textContent         = aliveTeamSet.size;
+        document.getElementById('totalEliminations').textContent      = elims;
+        matchStats = { remainingPlayers:alivePlayers, totalTeams:allTeamSet.size, remainingTeams:aliveTeamSet.size, totalEliminations:elims };
+    }
+
+    function checkTeamAlerts() {
+        const remaining = matchStats.remainingTeams;
+        const t1 = parseInt(document.getElementById('alertThreshold1').value, 10);
+        const t2 = parseInt(document.getElementById('alertThreshold2').value, 10);
+        if (remaining <= t1 && remaining > 0 && !alert1Triggered) { playAlertSound(1); alert1Triggered = true; }
+        if (remaining <= t2 && remaining > 0 && !alert2Triggered) { playAlertSound(2); alert2Triggered = true; }
+    }
+    function resetAlerts() { alert1Triggered = false; alert2Triggered = false; }
+
+    function trackLiveStateChanges(playerList) {
+        const liveStates = MapEngine.playerLiveStates;
+        const positions  = MapEngine.playerPositions;
+
+        const teamLiveMap = {};
+        for (let i = 0; i < playerList.length; i++) {
+            const p = playerList[i];
+            const tid = p.teamId ? p.teamId.toString() : '0';
+            if (!teamLiveMap[tid]) teamLiveMap[tid] = [];
+            teamLiveMap[tid].push(p.liveState);
+        }
+
+        for (let i = 0; i < playerList.length; i++) {
+            const player = playerList[i];
+            const name = player.playerName, curr = player.liveState;
+            const tid = player.teamId ? player.teamId.toString() : '0';
+            if (!liveStates[name]) liveStates[name] = [];
+            const hist = liveStates[name];
+            const last = hist.length > 0 ? hist[hist.length - 1] : null;
+            const prev = last ? last.liveState : -1;
+
+            if (!last || last.liveState !== curr) {
+                hist.push({ liveState:curr, timestamp:MapEngine.currentGameTimeSec,
+                    x:parseFloat(player.location.x), y:parseFloat(player.location.y), z:parseFloat(player.location.z) });
+
+                if (positions[name]) {
+                    const pp = positions[name];
+                    if ((prev === 2 || prev === 1) && (curr === 0 || curr === 3 || curr === 4)) {
+                        pp.isRecording = true;
+                    }
+                    else if (curr === 5 || curr === 6) {
+                        pp.isRecording = false;
+                    }
+                    else if (curr === 1 || curr === 2) {
+                        const teamStates = teamLiveMap[tid] || [];
+                        if (teamStates.every(ls => ls === 5 || ls === 6)) pp.isRecording = false;
+                    }
+                }
+            }
+        }
+    }
+
+    async function fetchSnapshot() {
+        if (!monitoringEnabled || debugToggle.checked || fetchingSnapshot) return;
+        fetchingSnapshot = true;
+        try {
+            const start = Date.now();
+            const res = await fetch('https://pubgm-aggregator-production.up.railway.app/getmatchsnapshot');
+            const latency = Date.now() - start;
+            if (!res.ok) throw new Error(`Error en getmatchsnapshot: ${res.status}`);
+            const snapshot = await res.json();
+            addConsoleEntry('SNAPSHOT', `OK (${latency}ms)`, true);
+            lastSnapshotTime = Date.now();
+            updatePollingStats();
+
+            if (snapshot.GameID !== currentGameID) {
+                currentGameID = snapshot.GameID;
+                gameStartTime = new Date(snapshot.GameStartTime || Date.now());
+                killInfo = {}; totalPlayerCount = 0;  
+                MapEngine.resetPositionTracking();
+                ZoneManager.resetMatchState();
+                resetAlerts();
+                autoFinalDone = false; autoFinalStep = 0;
+                autoFinalUnlocked = false;
+                gameIDChangeTime = Date.now();
+                addConsoleEntry('GAME', `Nueva partida detectada: ${currentGameID} — gracia ${AUTO_FINAL_GRACE_MS/1000}s`, true);
+            }
+            if (snapshot.allinfo && Array.isArray(snapshot.allinfo.TotalPlayerList)) {
+                MapEngine.setPlayerData(snapshot.allinfo);
+                if (!totalPlayerCount) totalPlayerCount = snapshot.allinfo.TotalPlayerList.length;
+                trackLiveStateChanges(snapshot.allinfo.TotalPlayerList);
+                updateMatchStats(); checkTeamAlerts();
+            }
+            if (snapshot.killinfo) {
+                if (currentGameID) {
+                    killInfo = {};
+                    for (let i = 0; i < snapshot.killinfo.length; i++)
+                        killInfo[snapshot.killinfo[i].VictimName] = snapshot.killinfo[i];
+                }
+            }
+            if (snapshot.circleinfo && snapshot.circleinfo.circleInfo && snapshot.circleinfo.CircleArray)
+                MapEngine.processCircleInfo(snapshot.circleinfo.circleInfo, snapshot.circleinfo.CircleArray);
+        } catch(err) {
+            addConsoleEntry('SNAPSHOT', `ERROR: ${err.message}`, false);
+            console.warn('Servidor no disponible:', err.message);
+        } finally {
+            fetchingSnapshot = false;
+        }
+    }
+
+    function checkAutoFinalSequence(snapshot) { /* desactivado */ }
+    function runAutoFinalSequence()           { /* desactivado */ }
+
+    const ZoneManager = (function() {
+        const DROP_CLUSTER_DISTANCE = 8000; 
+
+        let zones = {}, currentMap = null, currentMatchId = null;
+        let autoExportDropsDone = false;
+        let recordedTeams = new Set();
+
+        const playerLandedSet = new Set();
+        const prevLiveStateMap = new Map();
+
+        let teamLandingPositions = {};
+        let teamPlayersTotal = {};
+        const teamJumpedSet = new Set(); 
+
+        let allPlayersLandedTimer = null;
+        let dropsVisible = false; 
+
+        function generateUUID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+                const r = Math.random() * 16 | 0;
+                return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+            });
+        }
+
+        function majorityThreshold(total) {
+            if (total === 1) return 1;
+            if (total === 2) return 2;
+            if (total === 3) return 2;
+            return 3;
+        }
+
+        function loadZonesForMap(mapName) {
+            const stored = localStorage.getItem(`zones_${mapName}`);
+            if (stored) {
+                try { zones[mapName] = JSON.parse(stored); if (!zones[mapName].teamDrops) zones[mapName].teamDrops = []; }
+                catch(e) { zones[mapName] = { map:mapName, version:3, teamDrops:[] }; }
+            } else zones[mapName] = { map:mapName, version:3, teamDrops:[] };
+            currentMap = mapName; resetMatchState();
+        }
+
+        function resetMatchState() {
+            currentMatchId = generateUUID();
+            recordedTeams.clear();
+            playerLandedSet.clear();
+            prevLiveStateMap.clear();
+            teamLandingPositions = {};
+            teamPlayersTotal = {};
+            teamJumpedSet.clear();
+            autoExportDropsDone = false;
+            if (allPlayersLandedTimer) { clearTimeout(allPlayersLandedTimer); allPlayersLandedTimer = null; }
+            dropsVisible = localStorage.getItem('dropsVisible') === 'true';
+            MapEngine.setDirtyZones();
+        }
+
+        function saveZones() {
+            if (currentMap) localStorage.setItem(`zones_${currentMap}`, JSON.stringify(zones[currentMap]));
+        }
+
+        function findLargestCluster(points, thresh) {
+            let best = [];
+            const t2 = thresh * thresh;
+            for (let i = 0; i < points.length; i++) {
+                const cluster = [];
+                for (let j = 0; j < points.length; j++) {
+                    const dx = points[i].x - points[j].x, dy = points[i].y - points[j].y;
+                    if (dx*dx + dy*dy <= t2) cluster.push(points[j]);
+                }
+                if (cluster.length > best.length) best = cluster;
+            }
+            return best;
+        }
+
+        function evaluateTeamDrop(teamId) {
+            if (recordedTeams.has(teamId)) return;
+            const positions = teamLandingPositions[teamId];
+            if (!positions || !positions.length) return;
+            const total = teamPlayersTotal[teamId] || 0;
+            if (!total) return;
+
+            const needed = majorityThreshold(total);
+            if (positions.length < needed) return;
+
+            const cluster = findLargestCluster(positions, DROP_CLUSTER_DISTANCE);
+            if (cluster.length >= needed) {
+                let sumX = 0, sumY = 0;
+                for (let i = 0; i < cluster.length; i++) { sumX += cluster[i].x; sumY += cluster[i].y; }
+                const mapData = zones[currentMap];
+                if (!mapData) return;
+                mapData.teamDrops = mapData.teamDrops || [];
+                mapData.teamDrops.push({
+                    matchId: currentMatchId,
+                    teamNo: parseInt(teamId),
+                    teamName: MapEngine.teamNames[teamId] || `Team ${teamId}`,
+                    center: { x: sumX / cluster.length, y: sumY / cluster.length },
+                    playersLanded: positions.length,
+                    playersTotal: total,
+                    timestamp: MapEngine.currentGameTimeSec
+                });
+                recordedTeams.add(teamId);
+                saveZones();
+                MapEngine.setDirtyZones();
+                console.log(`[ZoneManager] Drop registrado equipo ${teamId} (${positions.length}/${total})`);
+            }
+        }
+
+        function checkForLandingTransition() {
+            const data = MapEngine.getPlayerData();
+            if (!data || !data.TotalPlayerList) return;
+            const players = data.TotalPlayerList;
+
+            for (let i = 0; i < players.length; i++) {
+                const player = players[i];
+                const name = player.playerName;
+                const curr = player.liveState;
+                const tid  = player.teamId ? player.teamId.toString() : '0';
+                const x    = parseFloat(player.location.x);
+                const y    = parseFloat(player.location.y);
+                const prev = prevLiveStateMap.get(name);
+
+                if (curr === 2) {
+                    const key = tid + ':' + name;
+                    if (!teamJumpedSet.has(key)) {
+                        teamJumpedSet.add(key);
+                        let cnt = 0;
+                        teamJumpedSet.forEach(k => { if (k.startsWith(tid + ':')) cnt++; });
+                        teamPlayersTotal[tid] = cnt;
+                    }
+                }
+
+                if (prev === 2 && (curr === 0 || curr === 3 || curr === 4)) {
+                    if (!playerLandedSet.has(name)) {
+                        playerLandedSet.add(name);
+                        console.log(`[ZoneManager] ${name} aterrizó (ls:${prev}→${curr}) en (${x.toFixed(0)}, ${y.toFixed(0)})`);
+
+                        if (!teamLandingPositions[tid]) teamLandingPositions[tid] = [];
+                        teamLandingPositions[tid].push({ x, y, playerName: name });
+
+                        evaluateTeamDrop(tid);
+                        checkAllLanded(players);
+                    }
+                }
+
+                prevLiveStateMap.set(name, curr);
+            }
+        }
+
+        function checkAllLanded(players) {
+            if (autoExportDropsDone) return;
+            if (teamJumpedSet.size === 0) return;
+
+            let allLanded = true;
+            teamJumpedSet.forEach(key => {
+                const playerName = key.split(':').slice(1).join(':');
+                if (!playerLandedSet.has(playerName)) allLanded = false;
+            });
+
+            if (allLanded && teamJumpedSet.size > 0) {
+                if (allPlayersLandedTimer) clearTimeout(allPlayersLandedTimer);
+                allPlayersLandedTimer = setTimeout(() => {
+                    triggerAutoExport('all_landed');
+                }, 1000); 
+            }
+        }
+
+        function triggerAutoExport(reason) {
+            if (autoExportDropsDone) return;
+            const toggle = document.getElementById('dropExportToggle');
+            if (toggle && !toggle.checked) {
+                console.log('[ZoneManager] Auto-export desactivado por toggle');
+                return;
+            }
+            autoExportDropsDone = true;
+            console.log('[ZoneManager] Auto-export disparado por:', reason);
+            exportDropsAndPositions();
+        }
+
+        function exportDropsAndPositions() {
+            const mapData = zones[currentMap] || { map: currentMap, teamDrops: [] };
+            const positions = MapEngine.playerPositions;
+            const liveStates = MapEngine.playerLiveStates;
+            const tnames = MapEngine.teamNames;
+            const tcolors = MapEngine.teamColors;
+            const mapSizes = { 'ERANGEL':807800,'RONDO':807800,'MIRAMAR':807800,'SANHOK':403000,'VIKENDI':604000 };
+
+            const playerData = Object.entries(positions).map(([playerName, pp]) => {
+                const expPos = pp.exportPositions || [];
+                const vizPos = (pp.positions || []).map(p => ({
+                    xReal: p.xReal, yReal: p.yReal, zReal: p.zReal,
+                    timestamp: p.timestamp || 0, liveState: p.liveState || 0
+                }));
+                return {
+                    playerName,
+                    teamId: pp.teamId,
+                    teamName: tnames[pp.teamId] || `Team ${pp.teamId}`,
+                    positions: expPos.length > 0 ? expPos : vizPos,
+                    liveStateChanges: liveStates[playerName] || []
+                };
+            });
+            const totalPts = playerData.reduce((s, p) => s + p.positions.length, 0);
+            console.log('[ZoneManager] Export:', playerData.length, 'players,', totalPts, 'puntos de trayectoria');
+
+            const exportObj = {
+                version: '2D-3D-ready',
+                coordinateSystem: 'PUBG_CM',
+                MapName: currentMap,
+                MapSize: mapSizes[currentMap] || 800000,
+                MapPath: '',
+                GameStartTime: 0,
+                FinishedStartTime: 0,
+                matchId: currentMatchId,
+                Drops: mapData,
+                PlayerData: playerData,
+                TeamColors: Object.entries(tcolors).map(([teamId, color]) => ({ teamId, color })),
+                TeamNames: tnames
+            };
+
+            const snap = MapEngine.getPlayerData();
+            if (snap) {
+                exportObj.GameStartTime = snap.GameStartTime || 0;
+                exportObj.FinishedStartTime = snap.FinishedStartTime || 0;
+            }
+
+            const ts = new Date().toISOString().slice(0,19).replace(/:/g,'-');
+            const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: 'application/json' });
+            const url  = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `drops_${currentMap}_${ts}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            console.log('[ZoneManager] Export completado:', link.download);
+        }
+
+        function checkGameEnd() {
+            const data = MapEngine.getPlayerData();
+            if (!data || !data.TotalPlayerList) return;
+            const aliveTeams = new Set();
+            const pl = data.TotalPlayerList;
+            for (let i = 0; i < pl.length; i++)
+                if (pl[i].liveState <= 4) aliveTeams.add(pl[i].teamId.toString());
+            if ((data.FinishedStartTime && data.FinishedStartTime > 0) || aliveTeams.size === 1) {
+                triggerAutoExport('game_end');
+            }
+        }
+
+        function drawZones() {
+            const zoneCanvas = document.getElementById('zoneCanvas');
+            const zoneCtx = zoneCanvas.getContext('2d', { willReadFrequently:false });
+            zoneCtx.clearRect(0, 0, zoneCanvas.width, zoneCanvas.height);
+            if (!dropsVisible || !currentMap || !zones[currentMap]) return;
+            const drops = zones[currentMap].teamDrops;
+            if (!drops || !drops.length) return;
+            const sc = MapEngine.scale, ox = MapEngine.offsetX, oy = MapEngine.offsetY, zl = MapEngine.zoomLevel;
+            zoneCtx.save();
+            zoneCtx.translate(ox, oy);
+            zoneCtx.scale(zl, zl);
+            for (let i = 0; i < drops.length; i++) {
+                const drop = drops[i];
+                const cx = drop.center.x * sc, cy = drop.center.y * sc;
+                zoneCtx.beginPath(); zoneCtx.arc(cx, cy, 6 / zl, 0, 2*Math.PI);
+                zoneCtx.fillStyle = MapEngine.teamColors[drop.teamNo] || '#fff'; zoneCtx.fill();
+                zoneCtx.strokeStyle = 'rgba(0,0,0,0.6)'; zoneCtx.lineWidth = 1.5 / zl; zoneCtx.stroke();
+                zoneCtx.fillStyle = '#fff'; zoneCtx.font = `bold ${14 / zl}px Arial`;
+                zoneCtx.textAlign = 'center';
+                zoneCtx.strokeStyle = 'rgba(0,0,0,0.8)'; zoneCtx.lineWidth = 3 / zl;
+                zoneCtx.strokeText(drop.teamName, cx, cy - 12 / zl);
+                zoneCtx.fillText(drop.teamName, cx, cy - 12 / zl);
+            }
+            zoneCtx.restore();
+        }
+
+        return {
+            loadZonesForMap,
+            onMapChange: loadZonesForMap,
+            resetMatchState,
+            checkDetection: checkForLandingTransition,
+            checkGameEnd,
+            drawZones,
+            exportManual: exportDropsAndPositions,
+            setDropsVisible(v) { dropsVisible = v; MapEngine.setDirtyZones(); }
+        };
+    })();
+
+    async function checkConnection() {
+        if (!monitoringEnabled) return; 
+        await testAggregatorConnection();
+    }
+
+    function updateConnectionDisplay() {
+        const dot = document.getElementById('connectionDot');
+        const stateEl = document.getElementById('connectionState');
+        const latencyEl = document.getElementById('connectionLatency');
+        const snapshotStatusEl = document.getElementById('snapshotStatus');
+        const snapshotLatencyEl = document.getElementById('snapshotLatency');
+        const commandStatusEl = document.getElementById('commandStatus');
+        const commandLatencyEl = document.getElementById('commandLatency');
+
+        const bothOk = snapshotStatus.ok && commandStatus.ok;
+        const anyOk = snapshotStatus.ok || commandStatus.ok;
+
+        if (bothOk) {
+            dot.style.backgroundColor = '#2ecc71';
+            stateEl.textContent = 'CONNECTED';
+        } else if (anyOk) {
+            dot.style.backgroundColor = '#f39c12';
+            stateEl.textContent = 'DEGRADED';
+        } else {
+            dot.style.backgroundColor = '#e74c3c';
+            stateEl.textContent = 'OFFLINE';
+        }
+
+        const avgLatency = (snapshotStatus.latency > 0 ? snapshotStatus.latency : 0) + (commandStatus.latency > 0 ? commandStatus.latency : 0);
+        latencyEl.textContent = `Avg Latency: ${avgLatency > 0 ? Math.round(avgLatency/2) : '?'}ms`;
+
+        snapshotStatusEl.textContent = snapshotStatus.ok ? 'OK' : 'FAIL';
+        snapshotLatencyEl.textContent = snapshotStatus.latency > 0 ? `${snapshotStatus.latency}ms` : '-';
+        commandStatusEl.textContent = commandStatus.ok ? 'OK' : 'FAIL';
+        commandLatencyEl.textContent = commandStatus.latency > 0 ? `${commandStatus.latency}ms` : '-';
+    }
+
+    function updatePollingStats() {
+        const lastSnapshotEl = document.getElementById('lastSnapshotTime');
+        const lastCommandEl = document.getElementById('lastCommandTime');
+        if (lastSnapshotTime) {
+            const secsAgo = ((Date.now() - lastSnapshotTime) / 1000).toFixed(1);
+            lastSnapshotEl.textContent = `${secsAgo}s ago`;
+        } else {
+            lastSnapshotEl.textContent = '-';
+        }
+        if (lastCommandTime) {
+            const secsAgo = ((Date.now() - lastCommandTime) / 1000).toFixed(1);
+            lastCommandEl.textContent = `${secsAgo}s ago`;
+        } else {
+            lastCommandEl.textContent = '-';
+        }
+    }
+    function updatePollingMonitor() { updatePollingStats(); }
+    setInterval(updatePollingStats, 1000);
+
+    async function fetchPCOBStatus() {
+        try {
+            const res = await fetch(`${AGGREGATOR_URL}/observers`, { cache: 'no-cache', signal: AbortSignal.timeout(2000) });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+
+            const dot   = document.getElementById('pcobDot');
+            const count = document.getElementById('pcobCount');
+            const list  = document.getElementById('pcobList');
+
+            const fresh = data.fresh || 0;
+            const total = data.active || 0;
+
+            if (fresh > 0) {
+                dot.style.background = '#2ecc71';
+                dot.style.boxShadow  = '0 0 6px #2ecc71';
+            } else if (total > 0) {
+                dot.style.background = '#f39c12';
+                dot.style.boxShadow  = '0 0 6px #f39c12';
+            } else {
+                dot.style.background = '#e74c3c';
+                dot.style.boxShadow  = 'none';
+            }
+
+            count.textContent = fresh > 0 ? fresh : (total > 0 ? total : '0');
+            count.style.color = fresh > 0 ? '#2ecc71' : (total > 0 ? '#f39c12' : '#e74c3c');
+
+            if (!data.observers || data.observers.length === 0) {
+                list.innerHTML = '<span style="color:#555;">Sin observadores activos</span>';
+                return;
+            }
+
+            list.innerHTML = data.observers
+                .filter(o => o.active)
+                .map(o => {
+                    const blocked = (() => { try { return JSON.parse(localStorage.getItem('obsBlockedList')||'[]'); } catch(e){ return []; } })();
+                    const isBlocked = blocked.includes(o.id) || blocked.includes(o.name);
+                    const statusColor = o.fresh ? '#2ecc71' : '#f39c12';
+                    const masterBadge = o.isMaster
+                        ? '<span style="background:#bc5efb;color:#000;border-radius:4px;padding:0 4px;font-size:10px;margin-left:4px;">MASTER</span>'
+                        : '';
+                    const blockedBadge = isBlocked
+                        ? '<span style="background:#c0392b;color:#fff;border-radius:4px;padding:0 4px;font-size:10px;margin-left:4px;">BLOQ</span>'
+                        : '';
+                    return `<div style="display:flex;align-items:center;gap:6px;">
+                        <span style="width:7px;height:7px;border-radius:50%;background:${statusColor};flex-shrink:0;display:inline-block;"></span>
+                        <span style="color:#ddd;">${o.name}</span>${masterBadge}${blockedBadge}
+                        <span style="color:#555;margin-left:auto;">${o.ageSec}s</span>
+                    </div>`;
+                }).join('');
+
+            if (window._updateObsFilterDots) window._updateObsFilterDots(data.observers);
+
+        } catch (e) {
+            const dot = document.getElementById('pcobDot');
+            if (dot) { dot.style.background = '#555'; dot.style.boxShadow = 'none'; }
+            const cnt = document.getElementById('pcobCount');
+            if (cnt) { cnt.textContent = '—'; cnt.style.color = '#555'; }
+        }
+    }
+
+    fetchPCOBStatus();
+    setInterval(fetchPCOBStatus, 3000);
+
+    setInterval(() => { ZoneManager.checkDetection(); ZoneManager.checkGameEnd(); }, 1000);
+
+    MapEngine.init();
+    ZoneManager.onMapChange('ERANGEL');
+    MapEngine.loadMap('ERANGEL');
+    toggleEliminatedButton.textContent = 'Mostrar Eliminados';
+    updateUIFromConfig();
+
+    const continuousCheck = document.getElementById('continuousMonitoring');
+    continuousCheck.addEventListener('change', function() {
+        if (this.checked) {
+            startMonitoring();
+        } else {
+            stopMonitoring();
+        }
+    });
+
+    const diagBtn = document.getElementById('diagConnectionBtn');
+    if (diagBtn) {
+        diagBtn.addEventListener('click', () => {
+            testAggregatorConnection();
+        });
+    }
+
+    function clearMockData() {
+        if (overlayTimerInterval) { clearInterval(overlayTimerInterval); overlayTimerInterval = null; }
+        if (overlayTimerDisplay) { overlayTimerDisplay.classList.remove('urgent'); overlayTimerDisplay.textContent = '—'; }
+        killInfo = {}; totalPlayerCount = 0;
+        MapEngine.setPlayerData(null); MapEngine.setCircleArray([]);
+        MapEngine.resetPositionTracking(); MapEngine.clearCanvases();
+        resetAlerts(); autoFinalDone = false; autoFinalStep = 0; autoFinalUnlocked = false;
+        ['remainingPlayers','totalTeams','remainingTeams','totalEliminations']
+            .forEach(id => document.getElementById(id).textContent = '0');
+        document.getElementById('totalPlayerCountDisplay').textContent = '0';
+        ['gameTime','counter','maxTime','countdown']
+            .forEach(id => document.getElementById(id).textContent = '00:00');
+        document.getElementById('circleStatus').textContent = '0';
+        document.getElementById('circleIndex').textContent  = '0';
+        document.getElementById('closeTeamsContainer').innerHTML = '';
+        setActiveOverlay(null); 
+        MapEngine.redrawAll();
+        console.log('[DEBUG] Limpiado');
+    }
+
+    debugToggle.addEventListener('change', function() {
+        applyDebugMode(this.checked);
+        if (!this.checked) {
+            clearMockData();
+            const editToggle = document.getElementById('overlayEditToggle');
+            if (editToggle && editToggle.checked) {
+                editToggle.checked = false;
+                sendOverlayCommand('debug_off');
+                try { localStorage.removeItem('__seqState'); } catch(e3) {}
+            }
+        }
+    });
+
+    document.addEventListener('change', function(e) {
+        if (e.target.id !== 'overlayEditToggle') return;
+        const on = e.target.checked;
+        sendOverlayCommand(on ? 'debug_on' : 'debug_off');
+        if (!on) {
+            try { localStorage.removeItem('__seqState'); } catch(e2) {}
+        }
+    });
+
+
+    (function wireSeqControl() {
+
+        const SEQ_STEPS = ['winnerLayer','mvpLayer','mvtLayer','classificationLayer'];
+        const SEQ_LABELS = { winnerLayer:'WWCD', mvpLayer:'MVP', mvtLayer:'MVT', classificationLayer:'Tabla' };
+        const SEQ_CMDS   = { winnerLayer:'showWinner', mvpLayer:'showMVP', mvtLayer:'showMVT', classificationLayer:'showTablaPartida' };
+
+        let _seqActive  = false;
+        let _seqPaused  = false;
+        let _seqDebugMode = false;  
+
+        const _editToggleEl = document.getElementById('overlayEditToggle');
+        document.addEventListener('change', function(ev) {
+            if (ev.target.id !== 'overlayEditToggle') return;
+            _seqDebugMode = ev.target.checked;
+            try {
+                const raw = localStorage.getItem('__seqState');
+                updateUI(raw ? JSON.parse(raw) : null);
+            } catch(e) {}
+        });
+
+        const seqLiveDot   = document.getElementById('seqLiveDot');
+        const seqStepLabel = document.getElementById('seqStepLabel');
+        const seqTimerLabel= document.getElementById('seqTimerLabel');
+        const seqBadge     = document.getElementById('seqBadge');
+        const btnStart     = document.getElementById('seqBtnStart');
+        const btnNext      = document.getElementById('seqBtnNext');
+        const btnPause     = document.getElementById('seqBtnPause');
+        const btnExtend    = document.getElementById('seqBtnExtend');
+        const btnCancel    = document.getElementById('seqBtnCancel');
+
+        const TL_IDS = {
+            winnerLayer:         { circle:'tlWinner', label:'tlWinnerLbl', conn:null       },
+            mvpLayer:            { circle:'tlMVP',    label:'tlMVPLbl',    conn:'tlConn1'  },
+            mvtLayer:            { circle:'tlMVT',    label:'tlMVTLbl',    conn:'tlConn2'  },
+            classificationLayer: { circle:'tlTabla',  label:'tlTablaLbl',  conn:'tlConn3'  }
+        };
+
+        function updateTimeline(layer, paused) {
+            const idx = SEQ_STEPS.indexOf(layer);
+            SEQ_STEPS.forEach((s, i) => {
+                const ids = TL_IDS[s];
+                const circ  = document.getElementById(ids.circle);
+                const lbl   = document.getElementById(ids.label);
+                const conn  = ids.conn ? document.getElementById(ids.conn) : null;
+                circ.className = 'seq-tl-circle';
+                lbl.className  = 'seq-tl-label';
+                if (conn) conn.className = 'seq-tl-conn';
+
+                if (i < idx) {
+                    circ.classList.add('done'); lbl.classList.add('done');
+                    if (conn) conn.classList.add('done');
+                } else if (i === idx) {
+                    circ.classList.add('active'); lbl.classList.add('active');
+                    if (paused) { circ.classList.add('paused'); lbl.classList.add('paused'); }
+                }
+            });
+        }
+
+        function resetTimeline() {
+            SEQ_STEPS.forEach(s => {
+                const ids = TL_IDS[s];
+                document.getElementById(ids.circle).className = 'seq-tl-circle';
+                document.getElementById(ids.label).className  = 'seq-tl-label';
+                if (ids.conn) document.getElementById(ids.conn).className = 'seq-tl-conn';
+            });
+        }
+
+        function updateUI(state) {
+            const { layer, paused, remaining } = state || {};
+            const active = !!layer;
+            _seqActive = active;
+            _seqPaused = !!paused;
+
+            seqLiveDot.classList.toggle('on', active);
+
+            if (!active) {
+                resetTimeline();
+                seqStepLabel.textContent = _seqDebugMode ? 'Listo (debug)' : 'Esperando partida...';
+                seqTimerLabel.textContent = '—';
+                seqTimerLabel.classList.remove('paused');
+                seqBadge.textContent = _seqDebugMode ? 'Debug' : 'En espera';
+                seqBadge.className   = 'seq-status-badge' + (_seqDebugMode ? ' live' : '');
+                btnStart.disabled  = !_seqDebugMode;
+                btnNext.disabled   = true;
+                btnPause.disabled  = true;
+                btnExtend.disabled = true;
+                btnCancel.disabled = false;
+                btnPause.textContent = '⏸ Pausa';
+                btnPause.className   = 'btn-seq-ctrl btn-sc-pause';
+                return;
+            }
+
+            updateTimeline(layer, paused);
+            seqStepLabel.textContent = SEQ_LABELS[layer] || layer;
+
+            const rem = typeof remaining === 'number' ? remaining : 0;
+            const mm = String(Math.floor(rem / 60)).padStart(2,'0');
+            const ss = String(rem % 60).padStart(2,'0');
+            seqTimerLabel.textContent = rem > 0 ? `${mm}:${ss}` : paused ? 'EN PAUSA' : '—';
+            seqTimerLabel.classList.toggle('paused', !!paused);
+
+            if (paused) {
+                seqBadge.textContent = '⏸ Pausado'; seqBadge.className = 'seq-status-badge paused';
+                btnPause.textContent = '▶ Reanudar'; btnPause.className = 'btn-seq-ctrl btn-sc-start';
+            } else {
+                seqBadge.textContent = '● En vivo'; seqBadge.className = 'seq-status-badge live';
+                btnPause.textContent = '⏸ Pausa'; btnPause.className = 'btn-seq-ctrl btn-sc-pause';
+            }
+
+            btnStart.disabled  = true;   
+            btnNext.disabled   = false;
+            btnPause.disabled  = false;
+            btnExtend.disabled = paused;  
+            btnCancel.disabled = false;
+        }
+
+        setInterval(() => {
+            try {
+                const raw = localStorage.getItem('__seqState');
+                if (raw) {
+                    const state = JSON.parse(raw);
+                    updateUI(state);
+                }
+            } catch(e) {}
+        }, 600);
+
+        btnStart.addEventListener('click', () => {
+            sendOverlayCommand('startFinalSeq');
+            setActiveOverlay('final_aniversario');
+        });
+
+        btnNext.addEventListener('click', () => {
+            sendOverlayCommand('next_final');
+        });
+
+        btnPause.addEventListener('click', () => {
+            if (_seqPaused) {
+                sendOverlayCommand('resume_final');
+            } else {
+                sendOverlayCommand('pause_final');
+            }
+        });
+
+        btnExtend.addEventListener('click', () => {
+            sendOverlayCommand('extend_final');
+        });
+
+        btnCancel.addEventListener('click', () => {
+            sendManualCommand('hideAll');
+        });
+
+        SEQ_STEPS.forEach(step => {
+            const el = document.getElementById(TL_IDS[step].circle);
+            if (!el) return;
+            el.addEventListener('click', () => {
+                const cmd = SEQ_CMDS[step];
+                sendManualCommand(cmd);
+                setActiveOverlay('final_aniversario');
+            });
+        });
+
+    })(); 
+
+    (function wireAutomation() {
+        const hideAllBtn = document.getElementById('hideAll');
+        if (hideAllBtn) {
+            hideAllBtn.addEventListener('click', () => {
+                sendManualCommand('hideAll');
+                if (overlayTimerInterval) { clearInterval(overlayTimerInterval); overlayTimerInterval = null; }
+                overlayTimerDisplay.classList.remove('urgent');
+                overlayTimerDisplay.textContent = '—';
+                _currentTablaOverlay = null;
+                _timerPaused = false;
+                const pauseBtn = document.getElementById('pauseTablaBtn');
+                if (pauseBtn) { pauseBtn.disabled = true; pauseBtn.textContent = '⏸ Pausar'; pauseBtn.classList.remove('paused'); }
+            }, { capture: true });
+        }
+    })();
+
+
+    startMonitoring();
+    continuousCheck.checked = true;
+
+    (function() {
+        const toggle = document.getElementById('dropExportToggle');
+        const slider = document.getElementById('dropExportSlider');
+        const thumb  = document.getElementById('dropExportThumb');
+        const status = document.getElementById('dropExportStatus');
+        const manualBtn = document.getElementById('manualDropExportBtn');
+        function syncToggle() {
+            const on = toggle.checked;
+            slider.style.background = on ? '#388e3c' : '#555';
+            thumb.style.transform = on ? 'translateX(16px)' : 'translateX(0)';
+            status.textContent = on ? 'Activo' : 'Desactivado';
+            status.style.color = on ? '#81c784' : '#f44336';
+            if (manualBtn) { manualBtn.disabled = !on; manualBtn.style.opacity = on ? '1' : '0.4'; }
+        }
+        if (toggle) {
+            const savedDropExport = localStorage.getItem('dropExportEnabled');
+            toggle.checked = savedDropExport === null ? true : savedDropExport === 'true';
+            toggle.addEventListener('change', function() {
+                localStorage.setItem('dropExportEnabled', toggle.checked ? 'true' : 'false');
+                syncToggle();
+            });
+            syncToggle();
+        }
+        if (manualBtn) {
+            manualBtn.addEventListener('click', function() {
+                const t = document.getElementById('dropExportToggle');
+                if (t && !t.checked) { alert('Exportación desactivada. Activa el toggle primero.'); return; }
+                ZoneManager.exportManual();
+            });
+        }
+    })();
+
+    (function wireUtilitiesTop3Toggle() {
+        const toggle = document.getElementById('utilitiesTop3Toggle');
+        if (!toggle) return;
+
+        toggle.checked = localStorage.getItem('showUtilitiesTop3') === 'true';
+
+        toggle.addEventListener('change', () => {
+            const on = toggle.checked;
+            localStorage.setItem('showUtilitiesTop3', on ? 'true' : 'false');
+            const cmd = on ? 'utils_top3_on' : 'utils_top3_off';
+
+            try {
+                const ch = new BroadcastChannel('pubgm_commands');
+                ch.postMessage({ type: 'command', cmd, timestamp: Date.now() });
+                ch.close();
+            } catch(e) {}
+
+            try {
+                localStorage.setItem('overlay_manual_cmd', JSON.stringify({ command: cmd, timestamp: Date.now() }));
+            } catch(e) {}
+
+            sendOverlayCommand(cmd);
+
+            addConsoleEntry('UTILS', `Utilidades top-3: ${on ? 'VISIBLES' : 'OCULTAS'}`, true);
+        });
+    })();
+
+    (function wireSeqModeToggle() {
+        const toggle   = document.getElementById('seqModeToggle');
+        const autoLbl  = document.getElementById('seqModeAutoLbl');
+        const mnlLbl   = document.getElementById('seqModeMnlLbl');
+        const note     = document.getElementById('seqManualNote');
+        const btnPause  = document.getElementById('seqBtnPause');
+        const btnExtend = document.getElementById('seqBtnExtend');
+
+        const STORAGE_KEY = 'seqManualMode';
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved === 'true') toggle.checked = true;
+
+        function applyMode(manual) {
+            autoLbl.classList.toggle('active', !manual);
+            mnlLbl.classList.toggle('active', manual);
+            note.classList.toggle('visible', manual);
+            if (manual) {
+                btnPause.disabled  = true;
+                btnExtend.disabled = true;
+            }
+            localStorage.setItem(STORAGE_KEY, manual ? 'true' : 'false');
+            try {
+                const ch = new BroadcastChannel('pubgm_commands');
+                ch.postMessage({ type:'command', cmd: manual ? 'seq_mode_manual' : 'seq_mode_auto', timestamp: Date.now() });
+                ch.close();
+            } catch(e) {}
+            try {
+                localStorage.setItem('seqMode', manual ? 'manual' : 'auto');
+                localStorage.setItem('overlay_manual_cmd', JSON.stringify({
+                    command: manual ? 'seq_mode_manual' : 'seq_mode_auto',
+                    timestamp: Date.now()
+                }));
+            } catch(e) {}
+            sendOverlayCommand(manual ? 'seq_mode_manual' : 'seq_mode_auto');
+            addConsoleEntry('SEQ', `Modo: ${manual ? 'Manual' : 'Automático'}`, true);
+        }
+
+        applyMode(toggle.checked);
+
+        toggle.addEventListener('change', () => applyMode(toggle.checked));
+
+        window._isSeqManualMode = () => toggle.checked;
+    })();
+
+    if (typeof VALID_COMMANDS !== 'undefined') {
+        VALID_COMMANDS.add('seq_mode_manual');
+        VALID_COMMANDS.add('seq_mode_auto');
+    }
+
+    (function wireScoringConfig() {
+        const DEFAULT_PP = { 1:20, 2:18, 3:16, 4:14, 5:12, 6:10, 7:8, 8:6, 9:5, 10:4,
+                             11:3, 12:2, 13:1, 14:1, 15:1, 16:1 };
+        const DEFAULT_BONUS = { grenade:3, vehicle:8, melee:13, molotov:3, distance:15, killDist:18 };
+        const STORAGE_KEY = 'scoringConfig';
+
+        function loadConfig() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (raw) return JSON.parse(raw);
+            } catch(e) {}
+            return {
+                pp: { ...DEFAULT_PP },
+                pePerKill: 2,
+                bonusEnabled: true,
+                bonus: { ...DEFAULT_BONUS }
+            };
+        }
+
+        function saveConfig(cfg) {
+            try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg)); } catch(e) {}
+        }
+
+        const grid = document.getElementById('ppRankGrid');
+        if (grid) {
+            const cfg = loadConfig();
+            for (let r = 1; r <= 16; r++) {
+                const cell = document.createElement('div');
+                cell.className = 'scoring-rank-cell';
+                const lbl = document.createElement('label');
+                lbl.textContent = `#${r}`;
+                const inp = document.createElement('input');
+                inp.type = 'number'; inp.min = '0'; inp.max = '999';
+                inp.value = cfg.pp[r] !== undefined ? cfg.pp[r] : 0;
+                inp.id = `ppRank${r}`;
+                cell.appendChild(lbl);
+                cell.appendChild(inp);
+                grid.appendChild(cell);
+            }
+        }
+
+        (function restoreFields() {
+            const cfg = loadConfig();
+            const pe = document.getElementById('pePerKill');
+            if (pe) pe.value = cfg.pePerKill !== undefined ? cfg.pePerKill : 2;
+            const be = document.getElementById('bonusEnabled');
+            if (be) {
+                be.checked = cfg.bonusEnabled !== false;
+                toggleBonusFields(be.checked);
+            }
+            const fields = ['grenade','vehicle','melee','molotov','distance','killDist'];
+            const ids    = ['bonusGrenade','bonusVehicle','bonusMelee','bonusMolotov','bonusDistance','bonusKillDist'];
+            fields.forEach((k, i) => {
+                const el = document.getElementById(ids[i]);
+                if (el && cfg.bonus && cfg.bonus[k] !== undefined) el.value = cfg.bonus[k];
+            });
+        })();
+
+        function toggleBonusFields(enabled) {
+            const bf = document.getElementById('bonusFields');
+            if (bf) {
+                bf.style.opacity = enabled ? '1' : '0.35';
+                bf.querySelectorAll('input').forEach(function(inp) { inp.disabled = !enabled; });
+            }
+        }
+
+        const bonusToggle = document.getElementById('bonusEnabled');
+        if (bonusToggle) {
+            bonusToggle.addEventListener('change', () => toggleBonusFields(bonusToggle.checked));
+        }
+
+        function broadcastScoringConfig(cfg) {
+            try {
+                const ch = new BroadcastChannel('pubgm_scoring');
+                ch.postMessage({ type: 'scoringConfig', config: cfg, timestamp: Date.now() });
+                ch.close();
+            } catch(e) {}
+            try {
+                localStorage.setItem('scoringConfigBroadcast', JSON.stringify({ config: cfg, timestamp: Date.now() }));
+            } catch(e) {}
+            // Via OverlayBridge / BroadcastChannel principal
+            try {
+                const payload = { command: "set_scoring", ...cfg };
+                localStorage.setItem("overlay_manual_cmd", JSON.stringify(payload));
+            } catch(e) {}
+            if (typeof OverlayConfig !== 'undefined') {
+                try { OverlayConfig.set({ scoring: cfg }); } catch(e) {}
+            }
+            addConsoleEntry('SCORING', 'Config difundida a overlays', true);
+        }
+
+        const applyBtn = document.getElementById('scoringApplyBtn');
+        const applyMsg = document.getElementById('scoringApplyMsg');
+        if (applyBtn) {
+            applyBtn.addEventListener('click', () => {
+                const cfg = { pp: {}, pePerKill: 2, bonusEnabled: true, bonus: {} };
+                for (let r = 1; r <= 16; r++) {
+                    const el = document.getElementById(`ppRank${r}`);
+                    cfg.pp[r] = el ? (parseInt(el.value) || 0) : 0;
+                }
+                const pe = document.getElementById('pePerKill');
+                cfg.pePerKill = pe ? (parseInt(pe.value) || 2) : 2;
+                const be = document.getElementById('bonusEnabled');
+                cfg.bonusEnabled = be ? be.checked : true;
+                cfg.bonus.grenade  = parseInt(document.getElementById('bonusGrenade')?.value  ?? '3',  10);
+                cfg.bonus.vehicle  = parseInt(document.getElementById('bonusVehicle')?.value  ?? '8',  10);
+                cfg.bonus.melee    = parseInt(document.getElementById('bonusMelee')?.value    ?? '13', 10);
+                cfg.bonus.molotov  = parseInt(document.getElementById('bonusMolotov')?.value  ?? '3',  10);
+                cfg.bonus.distance = parseInt(document.getElementById('bonusDistance')?.value ?? '15', 10);
+                cfg.bonus.killDist = parseInt(document.getElementById('bonusKillDist')?.value ?? '18', 10);
+
+                saveConfig(cfg);
+                broadcastScoringConfig(cfg);
+
+                if (applyMsg) {
+                    applyMsg.style.display = 'block';
+                    setTimeout(() => { applyMsg.style.display = 'none'; }, 2500);
+                }
+            });
+        }
+    })();
+
+    (function wireObsFilter() {
+        const STORAGE_KEY = 'obsBlockedList';
+        const grid = document.getElementById('obsFilterGrid');
+        if (!grid) return;
+
+        function loadBlocked() {
+            try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch(e) { return []; }
+        }
+        function saveBlocked(list) {
+            try { localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); } catch(e) {}
+        }
+
+        const blocked = loadBlocked();
+
+        for (let i = 1; i <= 8; i++) {
+            const id = `obs${i}`;
+            const item = document.createElement('label');
+            item.className = 'obs-cb-item' + (blocked.includes(id) ? ' blocked' : '');
+            item.htmlFor = `obsChk${i}`;
+
+            const cb = document.createElement('input');
+            cb.type = 'checkbox'; cb.id = `obsChk${i}`;
+            cb.checked = !blocked.includes(id); 
+            cb.addEventListener('change', () => {
+                item.classList.toggle('blocked', !cb.checked);
+                const namEl = item.querySelector('.obs-cb-name');
+                if (namEl) namEl.style.color = cb.checked ? '#ccc' : '#c0392b';
+            });
+
+            const lbl = document.createElement('span');
+            lbl.className = 'obs-cb-name';
+            lbl.textContent = `obs${i}`;
+            lbl.style.color = blocked.includes(id) ? '#c0392b' : '#ccc';
+
+            const statusDot = document.createElement('span');
+            statusDot.style.cssText = 'width:6px;height:6px;border-radius:50%;background:#555;';
+            statusDot.id = `obsFilterDot${i}`;
+
+            item.appendChild(cb);
+            item.appendChild(lbl);
+            item.appendChild(statusDot);
+            grid.appendChild(item);
+        }
+
+        window._updateObsFilterDots = function(observers) {
+            for (let i = 1; i <= 8; i++) {
+                const dot = document.getElementById(`obsFilterDot${i}`);
+                if (!dot) continue;
+                const obsId = `obs${i}`;
+                const obs = observers && observers.find(o => o.id === obsId || o.name === obsId);
+                if (obs && obs.active) {
+                    dot.style.background = obs.fresh ? '#2ecc71' : '#f39c12';
+                } else {
+                    dot.style.background = '#555';
+                }
+            }
+        };
+
+        const applyBtn = document.getElementById('obsFilterApplyBtn');
+        const applyMsg = document.getElementById('obsFilterMsg');
+        if (applyBtn) {
+            applyBtn.addEventListener('click', async () => {
+                const newBlocked = [];
+                for (let i = 1; i <= 8; i++) {
+                    const cb = document.getElementById(`obsChk${i}`);
+                    if (cb && !cb.checked) newBlocked.push(`obs${i}`);
+                }
+                saveBlocked(newBlocked);
+
+                try {
+                    const res = await fetch(`${AGGREGATOR_URL}/setobserverfilter`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ blockedObservers: newBlocked })
+                    });
+                    const ok = res.ok;
+                    addConsoleEntry('OBS-FILTER', `Bloqueados: [${newBlocked.join(',')||'ninguno'}] — ${ok ? 'OK' : 'FAIL'}`, ok);
+                    if (applyMsg) {
+                        applyMsg.textContent = ok
+                            ? `✓ Filtro aplicado — bloqueados: ${newBlocked.length ? newBlocked.join(', ') : 'ninguno'}`
+                            : '⚠ Error al contactar aggregator (guardado localmente)';
+                        applyMsg.style.color = ok ? '#2ecc71' : '#f0a500';
+                        applyMsg.style.display = 'block';
+                        setTimeout(() => { applyMsg.style.display = 'none'; }, 3000);
+                    }
+                } catch(e) {
+                    addConsoleEntry('OBS-FILTER', `Error: ${e.message} (guardado local)`, false);
+                    if (applyMsg) {
+                        applyMsg.textContent = '⚠ Sin conexión — filtro guardado localmente';
+                        applyMsg.style.color = '#f0a500';
+                        applyMsg.style.display = 'block';
+                        setTimeout(() => { applyMsg.style.display = 'none'; }, 3000);
+                    }
+                }
+            });
+        }
+    })();
+
+    (function patchPCOBStatus() {
+        const pcobList = document.getElementById('pcobList');
+        if (!pcobList) return;
+
+        function getBlockedList() {
+            try { return JSON.parse(localStorage.getItem('obsBlockedList') || '[]'); } catch(e) { return []; }
+        }
+
+        const mo = new MutationObserver(() => {
+            const blocked = getBlockedList();
+            if (!blocked.length) return;
+            pcobList.querySelectorAll('div').forEach(row => {
+                const nameEl = row.querySelector('span[style*="color:#ddd"]');
+                if (!nameEl) return;
+                const name = nameEl.textContent.trim();
+                const isBlocked = blocked.some(b => name.includes(b) || b === name);
+                if (isBlocked && !row.querySelector('.blocked-badge')) {
+                    const badge = document.createElement('span');
+                    badge.className = 'blocked-badge';
+                    badge.style.cssText = 'background:#c0392b;color:#fff;border-radius:4px;padding:0 4px;font-size:10px;margin-left:4px;';
+                    badge.textContent = 'BLOQ';
+                    nameEl.parentElement.insertBefore(badge, nameEl.nextSibling);
+                }
+            });
+        });
+        mo.observe(pcobList, { childList: true, subtree: true });
+
+        const _origFetch = window.fetchPCOBStatus;
+        setInterval(async () => {
+            try {
+                const res = await fetch(`${AGGREGATOR_URL}/observers`, { cache: 'no-cache', signal: AbortSignal.timeout(1200) });
+                if (!res.ok) return;
+                const data = await res.json();
+                if (window._updateObsFilterDots && data.observers) {
+                    window._updateObsFilterDots(data.observers);
+                }
+            } catch(e) {}
+        }, 4000);
+    })();
+
+    (function patchRouteExport() {
+        const _orig = ZoneManager.checkDetection.bind(ZoneManager);
+        let _bootstrapped = false;
+
+        ZoneManager.checkDetection = function() {
+            _orig();
+
+            if (!_bootstrapped) {
+                const data = MapEngine.getPlayerData();
+                if (!data || !data.TotalPlayerList) return;
+                const positions = MapEngine.playerPositions;
+                let anyGround = false;
+                data.TotalPlayerList.forEach(p => {
+                    if (p.liveState === 0 || p.liveState === 3 || p.liveState === 4) {
+                        anyGround = true;
+                        if (positions[p.playerName] && !positions[p.playerName].isRecording) {
+                            positions[p.playerName].isRecording = true;
+                        }
+                    }
+                });
+                if (anyGround) _bootstrapped = true;
+            }
+        };
+    })();
+
+    (function wireOverlayConfig() {
+        if (typeof OverlayConfig === 'undefined') return;
+
+        function setChecked(id, value) {
+            const el = document.getElementById(id);
+            if (el) el.checked = !!value;
+        }
+
+        function applyConfigToUI(cfg) {
+            if (!cfg) return;
+
+            const displayModeToggle = document.getElementById('displayModeToggle');
+            if (displayModeToggle && cfg.display && cfg.display.displayMode !== undefined) {
+                displayModeToggle.checked = cfg.display.displayMode === 'individual';
+            }
+
+            if (cfg.alerts) {
+                setChecked('toggleFirstKill', cfg.alerts.firstKill);
+                setChecked('toggleGrenade', cfg.alerts.firstGrenade);
+                setChecked('toggleZone', cfg.alerts.zone);
+                setChecked('toggleTeamEliminated', cfg.alerts.teamEliminated);
+            }
+
+            if (cfg.ui) {
+                setChecked('toggleTeamTable', cfg.ui.showTeamTable);
+                setChecked('toggleDropsRoutes', cfg.ui.showDropsRoutes);
+                setChecked('toggleThrowables', cfg.ui.showThrowables);
+            }
+        }
+
+        let CURRENT_CONFIG = OverlayConfig.get();
+        OverlayConfig.subscribe(function(cfg) {
+            CURRENT_CONFIG = cfg;
+            applyConfigToUI(cfg);
+        });
+
+        document.getElementById('toggleFirstKill')?.addEventListener('change', function(e) {
+            OverlayConfig.set({ alerts: { firstKill: e.target.checked } });
+            sendOverlayCommand('alert_firstKill_' + (e.target.checked ? 'on' : 'off'));
+        });
+
+        document.getElementById('toggleGrenade')?.addEventListener('change', function(e) {
+            OverlayConfig.set({ alerts: { firstGrenade: e.target.checked } });
+            sendOverlayCommand('alert_firstGrenade_' + (e.target.checked ? 'on' : 'off'));
+        });
+
+        document.getElementById('toggleZone')?.addEventListener('change', function(e) {
+            OverlayConfig.set({ alerts: { zone: e.target.checked } });
+            sendOverlayCommand('alert_zone_' + (e.target.checked ? 'on' : 'off'));
+        });
+
+        document.getElementById('toggleTeamEliminated')?.addEventListener('change', function(e) {
+            OverlayConfig.set({ alerts: { teamEliminated: e.target.checked } });
+            sendOverlayCommand('alert_teamEliminated_' + (e.target.checked ? 'on' : 'off'));
+        });
+
+        document.getElementById('toggleDropsRoutes')?.addEventListener('change', function(e) {
+            OverlayConfig.set({ ui: { showDropsRoutes: e.target.checked } });
+            sendOverlayCommand('ui_dropsRoutes_' + (e.target.checked ? 'on' : 'off'));
+        });
+
+        document.getElementById('toggleThrowables')?.addEventListener('change', function(e) {
+            OverlayConfig.set({ ui: { showThrowables: e.target.checked } });
+            sendOverlayCommand('ui_throwables_' + (e.target.checked ? 'on' : 'off'));
+        });
+
+        document.getElementById('toggleTeamTable')?.addEventListener('change', function(e) {
+            OverlayConfig.set({ ui: { showTeamTable: e.target.checked } });
+            sendOverlayCommand('ui_teamTable_' + (e.target.checked ? 'on' : 'off'));
+        });
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() {
+                applyConfigToUI(OverlayConfig.get());
+            });
+        } else {
+            applyConfigToUI(OverlayConfig.get());
+        }
+    })();
+
+    console.log("[OVERLAY CONTROL] system ready");
+    addConsoleEntry('SYSTEM', 'Panel listo', true);
+})();
+</script>
+</body>
+</html>
