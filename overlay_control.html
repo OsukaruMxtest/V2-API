@@ -2477,7 +2477,7 @@
         fetchingSnapshot = true;
         try {
             const start = Date.now();
-            const res = await fetch('https://pubgm-aggregator-production.up.railway.app/getmatchsnapshot');
+            const res = await fetch('https://v2-api-production-db45.up.railway.app/getmatchsnapshot');
             const latency = Date.now() - start;
             if (!res.ok) throw new Error(`Error en getmatchsnapshot: ${res.status}`);
             const snapshot = await res.json();
