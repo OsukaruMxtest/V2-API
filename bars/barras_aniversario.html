@@ -1273,11 +1273,11 @@
 
                     lastOverlayCommandTimestamp = data.timestamp;
                     const cmd = data.cmd || data.command;
-                    if (cmd) handleOverlayCommand(cmd, data);
+                    if (cmd) handleOverlayCommand(cmd);
                     if (commandChannel?.postMessage) {
                         const rebroadcastPayload = { type: 'command', cmd, timestamp: data.timestamp };
                         if (cmd === 'set_display_mode') {
-                            rebroadcastPayload.mode = data.mode === 'individual' ? 'individual' : 'team';
+                            rebroadcastPayload.mode = CURRENT_MODE;
                             rebroadcastPayload.command = cmd;
                         }
                         commandChannel.postMessage(rebroadcastPayload);
@@ -1290,7 +1290,7 @@
             }
 
             let reloadGuard = false;
-            function handleOverlayCommand(cmd, payload = {}) {
+            function handleOverlayCommand(cmd) {
                 switch (cmd) {
                     case 'reset_overlay':
                         if (reloadGuard) return;
@@ -1328,9 +1328,6 @@
                         window.OverlayConfig?.set({ display: { displayMode: 'team' } });
                         break;
                     case 'set_display_mode':
-                        if (payload.mode) {
-                            window.OverlayConfig?.set({ display: { displayMode: payload.mode } });
-                        }
                         break;
                     default:
                         break;
