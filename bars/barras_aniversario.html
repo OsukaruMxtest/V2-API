@@ -1173,7 +1173,7 @@
                             CURRENT_MODE = newMode;
                             const headerLabel = document.querySelector('#tableHeader .t-equipo');
                             if (headerLabel) {
-                                headerLabel.textContent = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
+                                headerLabel.textContent = '' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
                             }
                         }
                         applyVisibility();
@@ -1664,7 +1664,7 @@
             async function renderTable(teams) {
                 const headerLabel = document.querySelector('#tableHeader .t-equipo');
                 if (headerLabel) {
-                    headerLabel.textContent = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === "individual" ? "JUGADOR" : "EQUIPO");
+                    headerLabel.textContent = '' + (CURRENT_MODE === "individual" ? "JUGADOR" : "EQUIPO");
                 }
                 const currentGameID = CURRENT_SNAPSHOT?.GameID || CURRENT_SNAPSHOT?.allinfo?.GameID || null;
                 if (currentGameID && currentGameID !== lastRenderedGameID) {
