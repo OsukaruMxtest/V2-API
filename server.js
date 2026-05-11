@@ -15,7 +15,7 @@ app.use(express.json({ limit: "5mb" }));
 
 const PORT = process.env.PORT || 3000;
 
-const TOURNAMENT_TOKEN = process.env.TOURNAMENT_TOKEN || "SRD";
+const TOURNAMENT_TOKEN = process.env.TOURNAMENT_TOKEN || "V2";
 
 const OBSERVER_TIMEOUT = 30000;         
 const MAX_KILLS = 3000;
