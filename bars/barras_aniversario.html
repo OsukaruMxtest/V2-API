@@ -1202,6 +1202,18 @@
                     window.OverlayBus.on('col_total_off',() => { applyColumnVisibility(); scheduleRender(); });
                 }
 
+                try {
+                    const cmdChannel = new BroadcastChannel('pubgm_commands');
+                    cmdChannel.onmessage = function(e) {
+                        const data = e.data;
+                        if (!data) return;
+                        const cmd = data.cmd || data.command;
+                        if (!cmd) return;
+                        if (window.OverlayBus) {
+                            window.OverlayBus.emit(cmd, { ...data, command: cmd });
+                        }
+                    };
+                } catch(e) {}
                 window.addEventListener('storage', (e) => {
                     if (e.key === 'overlay_manual_cmd' && e.newValue) {
                         try {
@@ -1261,11 +1273,11 @@
 
                     lastOverlayCommandTimestamp = data.timestamp;
                     const cmd = data.cmd || data.command;
-                    if (cmd) handleOverlayCommand(cmd, data);
+                    if (cmd) handleOverlayCommand(cmd);
                     if (commandChannel?.postMessage) {
                         const rebroadcastPayload = { type: 'command', cmd, timestamp: data.timestamp };
                         if (cmd === 'set_display_mode') {
-                            rebroadcastPayload.mode = data.mode === 'individual' ? 'individual' : 'team';
+                            rebroadcastPayload.mode = CURRENT_MODE;
                             rebroadcastPayload.command = cmd;
                         }
                         commandChannel.postMessage(rebroadcastPayload);
@@ -1278,7 +1290,7 @@
             }
 
             let reloadGuard = false;
-            function handleOverlayCommand(cmd, payload = {}) {
+            function handleOverlayCommand(cmd) {
                 switch (cmd) {
                     case 'reset_overlay':
                         if (reloadGuard) return;
@@ -1316,9 +1328,6 @@
                         window.OverlayConfig?.set({ display: { displayMode: 'team' } });
                         break;
                     case 'set_display_mode':
-                        if (payload.mode) {
-                            window.OverlayConfig?.set({ display: { displayMode: payload.mode } });
-                        }
                         break;
                     default:
                         break;
@@ -2200,7 +2209,7 @@
 
                 const headerLabel = document.querySelector('#tableHeader .t-equipo');
                 if (headerLabel) {
-                    headerLabel.textContent = '' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
+                    headerLabel.textContent = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
                 }
 
                 if (!cur.columns) {
