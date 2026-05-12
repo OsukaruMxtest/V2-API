@@ -1243,7 +1243,9 @@
                 });
             }
 
-            let lastOverlayCommandTimestamp = 0;
+            // FIX: initialize to page-load time so stale server commands (from previous
+            // sessions) are ignored on first poll and cannot silently revert the current mode.
+            let lastOverlayCommandTimestamp = Date.now();
             let lastProcessedCommandKey = null;
             let commandFetchInProgress = false;
 

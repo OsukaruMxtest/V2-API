@@ -905,14 +905,23 @@ app.post("/overlaycommand", (req, res) => {
         return res.json({ status: "ignored" });
     }
 
+    // FIX: Preserve the full payload so fields like 'mode' survive the round-trip.
+    // We spread req.body and only override the fields we normalise.
+    const entry = {
+        ...req.body,          // keeps 'mode', 'command', and any future fields
+        cmd,
+        timestamp,
+        source: source || null
+    };
+
     if (timestamp > lastOverlayCommand.timestamp) {
-        lastOverlayCommand = { cmd, timestamp, source: source || null };
+        lastOverlayCommand = entry;
         console.log("[OVERLAY CMD]", lastOverlayCommand);
     }
 
     const exists = overlayCommandsBuffer.some(e => e.timestamp === timestamp);
     if (!exists) {
-        overlayCommandsBuffer.push({ cmd, timestamp, source: source || null });
+        overlayCommandsBuffer.push(entry);
         overlayCommandsBuffer.sort((a, b) => a.timestamp - b.timestamp);
         if (overlayCommandsBuffer.length > OVERLAY_BUFFER_SIZE) {
             overlayCommandsBuffer = overlayCommandsBuffer.slice(-OVERLAY_BUFFER_SIZE);
