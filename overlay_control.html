@@ -1434,7 +1434,8 @@
         'ui_throwables_on',   'ui_throwables_off',
         'ui_teamTable_on',    'ui_teamTable_off',
         'col_pp_on',          'col_pp_off',
-        'col_total_on',       'col_total_off'
+        'col_total_on',       'col_total_off',
+        'set_scoring'
     ]);
 
     (function _checkModules() {
@@ -3358,19 +3359,16 @@
         }
 
         function broadcastScoringConfig(cfg) {
-            try {
-                const ch = new BroadcastChannel('pubgm_scoring');
-                ch.postMessage({ type: 'scoringConfig', config: cfg, timestamp: Date.now() });
-                ch.close();
-            } catch(e) {}
-            try {
-                localStorage.setItem('scoringConfigBroadcast', JSON.stringify({ config: cfg, timestamp: Date.now() }));
-            } catch(e) {}
-            // Via OverlayBridge / BroadcastChannel principal
-            try {
-                const payload = { command: "set_scoring", ...cfg };
-                localStorage.setItem("overlay_manual_cmd", JSON.stringify(payload));
-            } catch(e) {}
+            // FIX: route through sendOverlayCommand so the full payload (pp, pePerKill,
+            // bonusEnabled, bonus) reaches the server and is distributed to other browsers
+            // via pollOverlayCommands — the same path used by set_display_mode, col_pp_on, etc.
+            // The previous approach used a custom BroadcastChannel and localStorage keys that
+            // barras_aniversario never listened to, and never called sendOverlayCommand,
+            // so the server never received the scoring config.
+            sendOverlayCommand('set_scoring', cfg);
+
+            // Also update OverlayConfig locally so the control panel stays in sync
+            // and same-browser overlays get the config immediately via BroadcastChannel.
             if (typeof OverlayConfig !== 'undefined') {
                 try { OverlayConfig.set({ scoring: cfg }); } catch(e) {}
             }

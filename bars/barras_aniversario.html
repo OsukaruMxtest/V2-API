@@ -1329,6 +1329,23 @@
                             window.OverlayConfig?.set({ display: { displayMode: payload.mode } });
                         }
                         break;
+                    case 'set_scoring': {
+                        // FIX: apply scoring config received from the server (sent by overlay_control).
+                        // Reconstruct a clean scoring object from the payload fields so that
+                        // OverlayConfig.scoring always has the expected shape.
+                        const scoringPatch = {};
+                        if (payload.pp           !== undefined) scoringPatch.pp           = payload.pp;
+                        if (payload.pePerKill    !== undefined) scoringPatch.pePerKill    = Number(payload.pePerKill);
+                        if (payload.bonusEnabled !== undefined) scoringPatch.bonusEnabled = !!payload.bonusEnabled;
+                        if (payload.bonus        !== undefined) scoringPatch.bonus        = payload.bonus;
+                        if (Object.keys(scoringPatch).length > 0) {
+                            window.OverlayConfig?.set({ scoring: scoringPatch });
+                            // Force an immediate re-render so the new points appear without
+                            // waiting for the next snapshot poll cycle.
+                            if (typeof scheduleRender === 'function') scheduleRender();
+                        }
+                        break;
+                    }
                     default:
                         break;
                 }
