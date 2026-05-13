@@ -542,12 +542,6 @@
             transition: opacity 0.4s ease, transform 0.4s ease;
         }
 
-        #tableHeader,
-        #tableBody .t-row,
-        .nomenclatura-centrada {
-            transition: none;
-        }
-
         #tableBody .t-row .t-pos {
             background-image: url('../bars/images/rank.png');
             background-size: cover;
@@ -1854,24 +1848,30 @@
                     }
                 });
 
+                const elimWidth = (!showPP && !showTotal) ? '58px' : '45px';
                 const cols = [
                     '40px',
                     '45px',
                     'minmax(120px,1fr)',
                     '70px',
                     showPP ? '45px' : '0px',
-                    '45px',
+                    elimWidth,
                     showTotal ? '65px' : '0px'
                 ];
                 const gridVal = cols.join(' ');
 
-                document.querySelectorAll('.t-row').forEach(row => {
+                const rows = document.querySelectorAll('.t-row');
+                rows.forEach(row => {
                     row.style.gridTemplateColumns = gridVal;
+                    void row.offsetWidth;
                 });
 
                 const overlay = document.querySelector('.overlay-content');
                 if (overlay) {
-                    const totalFixed = 40 + 45 + 120 + 70 + (showPP ? 45 : 0) + 45 + (showTotal ? 65 : 0);
+                    const totalFixed = 40 + 45 + 120 + 70 +
+                        (showPP ? 45 : 0) +
+                        parseInt(elimWidth) +
+                        (showTotal ? 65 : 0);
                     overlay.style.maxWidth = totalFixed + 'px';
                 }
             }
