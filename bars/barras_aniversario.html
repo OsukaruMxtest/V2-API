@@ -93,7 +93,6 @@
             border-radius: 0px;
             transform-origin: top center;
             min-height: 32px;
-            transition: grid-template-columns 0.35s cubic-bezier(.4,0,.2,1);
         }
         .t-cell {
             padding: 4px 2px;
@@ -111,6 +110,11 @@
             text-align: left;
             justify-content: flex-start;
             padding-left: 6px;
+        }
+        .t-name,
+        .t-equipo {
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         #tableHeader {
             background-color: #1D1A73 !important;
@@ -540,6 +544,12 @@
             opacity: 0;
             transform: translateX(40px);
             transition: opacity 0.4s ease, transform 0.4s ease;
+        }
+
+        #tableHeader,
+        #tableBody .t-row,
+        .nomenclatura-centrada {
+            transition: none;
         }
 
         #tableBody .t-row .t-pos {
@@ -1860,10 +1870,18 @@
                 ];
                 const gridVal = cols.join(' ');
 
-                const rows = document.querySelectorAll('.t-row');
-                rows.forEach(row => {
+                const header = document.getElementById('tableHeader');
+                header.style.display = 'none';
+                void header.offsetHeight;
+                header.style.gridTemplateColumns = gridVal;
+                header.style.display = 'grid';
+
+                const bodyRows = document.querySelectorAll('#tableBody .t-row');
+                bodyRows.forEach(row => {
+                    row.style.display = 'none';
+                    void row.offsetHeight;
                     row.style.gridTemplateColumns = gridVal;
-                    void row.offsetWidth;
+                    row.style.display = 'grid';
                 });
 
                 const overlay = document.querySelector('.overlay-content');
@@ -1872,6 +1890,8 @@
                         (showPP ? 45 : 0) +
                         parseInt(elimWidth) +
                         (showTotal ? 65 : 0);
+                    overlay.style.width = totalFixed + 'px';
+                    overlay.style.minWidth = totalFixed + 'px';
                     overlay.style.maxWidth = totalFixed + 'px';
                 }
             }
