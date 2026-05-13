@@ -55,8 +55,7 @@
             top: 600px;
             right: 0px;
             transform: translateY(-50%);
-            width: auto;
-            max-width: var(--table-max-width);
+            width: var(--table-max-width);
             max-height: var(--table-max-height);
             display: flex;
             flex-direction: column;
@@ -66,6 +65,7 @@
             background: transparent;
             visibility: visible;
             opacity: 1;
+            transition: none;
         }
         .overlay-content.large-table-bg {
             background-image: none;
@@ -86,12 +86,12 @@
         }
         .t-row {
             display: grid;
-            grid-template-columns: 40px 45px 170px 70px 45px 45px 65px;
+            grid-template-columns: 40px 45px 1fr 70px 45px 45px 65px;
             width: 100%;
             font-weight: bold;
             border-radius: 0px;
             transform-origin: top center;
-            height: 32px;
+            min-height: 32px;
         }
         .t-cell {
             padding: 4px 2px;
@@ -103,39 +103,16 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            min-width: 0;
         }
         .t-equipo {
             text-align: left;
             justify-content: flex-start;
             padding-left: 6px;
         }
-        .t-name,
-        .t-equipo {
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            min-width: 0;
-        }
         #tableHeader {
             background-color: #1D1A73 !important;
             color: var(--header-text-color);
             font-weight: 700;
-        }
-        #tableHeader .t-cell {
-            white-space: nowrap;
-            flex-wrap: nowrap;
-            line-height: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-width: 0;
-            min-height: 36px;
-            height: 36px;
-        }
-        #tableHeader,
-        #tableBody .t-row {
-            overflow: hidden;
         }
         .overlay-content.large-table-bg #tableBody .t-row:nth-child(odd) {
             background-color: rgba(34, 65, 242, 0.45);
@@ -148,17 +125,6 @@
         }
         .t-row.eliminado { opacity: 0.45; color: #aaa; }
 
-        .col-pp, .col-total {
-            overflow: hidden;
-            transition: none;
-        }
-        .col-hidden {
-            opacity: 0 !important;
-            pointer-events: none;
-        }
-        .col-visible {
-            opacity: 1;
-        }
 
         @keyframes slideInRight {
             0%   { opacity: 0; transform: translateX(110%); }
@@ -177,16 +143,10 @@
             0%   { opacity: 1; transform: translateX(0); }
             100% { opacity: 0; transform: translateX(110%); }
         }
-        @keyframes flipHeader {
-            0%   { transform: rotateX(0deg); opacity: 1; }
-            45%  { transform: rotateX(90deg); opacity: 0; }
-            55%  { transform: rotateX(90deg); opacity: 0; }
-            100% { transform: rotateX(0deg); opacity: 1; }
-        }
-        .header-flip {
-            animation: flipHeader 0.25s ease-in-out;
-            transform-style: preserve-3d;
-            backface-visibility: hidden;
+        #tableHeader,
+        #tableBody .t-row,
+        .nomenclatura-centrada {
+            overflow: hidden;
         }
         .header-slide-in  { animation: slideInRight  0.35s cubic-bezier(.22,.68,0,1.2) forwards; }
         .header-slide-out { animation: slideOutRight 0.28s ease-in forwards; }
@@ -722,29 +682,22 @@
                 if (!window.OverlayConfig) return;
                 const cfg = window.OverlayConfig.get();
                 const newMode = cfg.display?.displayMode || 'team';
-                const headerLabel = document.querySelector('#tableHeader .t-equipo');
-                if (!headerLabel) return;
-                const expectedText = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (newMode === 'individual' ? 'JUGADOR' : 'EQUIPO');
-                if (CURRENT_MODE !== newMode) {
+                if (newMode !== CURRENT_MODE) {
                     CURRENT_MODE = newMode;
-                    if (headerLabel.textContent !== expectedText) {
-                        headerLabel.classList.add('header-flip');
-                        const midAnimation = 125;
-                        setTimeout(() => {
-                            headerLabel.textContent = expectedText;
-                        }, midAnimation);
-                        const onAnimEnd = () => {
-                            headerLabel.classList.remove('header-flip');
-                            headerLabel.removeEventListener('animationend', onAnimEnd);
-                        };
-                        headerLabel.addEventListener('animationend', onAnimEnd);
+                    const headerLabel = document.querySelector('#tableHeader .t-equipo');
+                    if (headerLabel) {
+                        headerLabel.textContent = '' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
                     }
                     if (typeof CURRENT_SNAPSHOT !== 'undefined' && CURRENT_SNAPSHOT && !renderScheduled) {
                         scheduleRender();
                     }
                 } else {
-                    if (headerLabel.textContent !== expectedText) {
-                        headerLabel.textContent = expectedText;
+                    const headerLabel = document.querySelector('#tableHeader .t-equipo');
+                    if (headerLabel) {
+                        const expectedText = '' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
+                        if (headerLabel.textContent !== expectedText) {
+                            headerLabel.textContent = expectedText;
+                        }
                     }
                 }
             }
@@ -790,7 +743,6 @@
             let currentPanelIndex = 0;
             let panelStartTime = 0;
             let lastPanelSize = 0;
-            let lastOverlayWidth = null;
 
             const rankToPPP = {
                 1:10, 2:8, 3:6, 4:5, 5:4, 6:3, 7:2, 8:1, 9:1, 10:1
@@ -1308,6 +1260,8 @@
                 });
             }
 
+            // FIX: initialize to page-load time so stale server commands (from previous
+            // sessions) are ignored on first poll and cannot silently revert the current mode.
             let lastOverlayCommandTimestamp = Date.now();
             let lastProcessedCommandKey = null;
             let commandFetchInProgress = false;
@@ -1393,6 +1347,9 @@
                         }
                         break;
                     case 'set_scoring': {
+                        // FIX: apply scoring config received from the server (sent by overlay_control).
+                        // Reconstruct a clean scoring object from the payload fields so that
+                        // OverlayConfig.scoring always has the expected shape.
                         const scoringPatch = {};
                         if (payload.pp           !== undefined) scoringPatch.pp           = payload.pp;
                         if (payload.pePerKill    !== undefined) scoringPatch.pePerKill    = Number(payload.pePerKill);
@@ -1400,6 +1357,8 @@
                         if (payload.bonus        !== undefined) scoringPatch.bonus        = payload.bonus;
                         if (Object.keys(scoringPatch).length > 0) {
                             window.OverlayConfig?.set({ scoring: scoringPatch });
+                            // Force an immediate re-render so the new points appear without
+                            // waiting for the next snapshot poll cycle.
                             if (typeof scheduleRender === 'function') scheduleRender();
                         }
                         break;
@@ -1745,10 +1704,7 @@
             async function renderTable(teams) {
                 const headerLabel = document.querySelector('#tableHeader .t-equipo');
                 if (headerLabel) {
-                    const expectedText = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === "individual" ? "JUGADOR" : "EQUIPO");
-                    if (headerLabel.textContent !== expectedText) {
-                        headerLabel.textContent = expectedText;
-                    }
+                    headerLabel.textContent = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === "individual" ? "JUGADOR" : "EQUIPO");
                 }
                 const currentGameID = CURRENT_SNAPSHOT?.GameID || CURRENT_SNAPSHOT?.allinfo?.GameID || null;
                 if (currentGameID && currentGameID !== lastRenderedGameID) {
@@ -1839,65 +1795,21 @@
                 const showTotal = cfg?.columns?.showTotal ?? true;
 
                 document.querySelectorAll('.col-pp').forEach(el => {
-                    if (showPP) {
-                        el.classList.remove('col-hidden');
-                        el.classList.add('col-visible');
-                    } else {
-                        el.classList.add('col-hidden');
-                        el.classList.remove('col-visible');
-                    }
+                    el.style.display = showPP ? '' : 'none';
                 });
                 document.querySelectorAll('.col-total').forEach(el => {
-                    if (showTotal) {
-                        el.classList.remove('col-hidden');
-                        el.classList.add('col-visible');
-                    } else {
-                        el.classList.add('col-hidden');
-                        el.classList.remove('col-visible');
-                    }
+                    el.style.display = showTotal ? '' : 'none';
                 });
 
-                const elimWidth = (!showPP && !showTotal) ? '58px' : '45px';
-                const cols = [
-                    '40px',
-                    '45px',
-                    '170px',
-                    '70px',
-                    showPP ? '45px' : '0px',
-                    elimWidth,
-                    showTotal ? '65px' : '0px'
-                ];
+                const cols = ['40px', '45px', '1fr', '70px'];
+                if (showPP)    cols.push('45px');
+                cols.push('45px');
+                if (showTotal) cols.push('65px');
                 const gridVal = cols.join(' ');
 
-                const header = document.getElementById('tableHeader');
-                header.style.visibility = 'hidden';
-                void header.offsetHeight;
-                header.style.gridTemplateColumns = gridVal;
-                header.style.visibility = 'visible';
-                void header.getBoundingClientRect();
-
-                const bodyRows = document.querySelectorAll('#tableBody .t-row');
-                bodyRows.forEach(row => {
-                    row.style.visibility = 'hidden';
-                    void row.offsetHeight;
+                document.querySelectorAll('.t-row').forEach(row => {
                     row.style.gridTemplateColumns = gridVal;
-                    row.style.visibility = 'visible';
-                    void row.getBoundingClientRect();
                 });
-
-                const overlay = document.querySelector('.overlay-content');
-                if (overlay) {
-                    const totalFixed = 40 + 45 + 170 + 70 +
-                        (showPP ? 45 : 0) +
-                        parseInt(elimWidth) +
-                        (showTotal ? 65 : 0);
-                    if (lastOverlayWidth !== totalFixed) {
-                        lastOverlayWidth = totalFixed;
-                        overlay.style.width = totalFixed + 'px';
-                        overlay.style.minWidth = totalFixed + 'px';
-                        overlay.style.maxWidth = totalFixed + 'px';
-                    }
-                }
             }
 
             function rebuildPlayersFromSnapshot(allinfo) {
