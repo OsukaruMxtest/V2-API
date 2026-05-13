@@ -507,18 +507,18 @@
         /* Column slide-in/slide-out for PP and PTS */
         .col-pp, .col-total {
             overflow: hidden;
-            max-width: 100px;
-            transition: max-width 0.35s cubic-bezier(.22,.68,0,1.15), 
-                        opacity 0.28s ease,
-                        padding 0.35s ease;
+            transition: opacity 0.28s ease;
         }
         .col-pp.col-hidden, .col-total.col-hidden {
-            max-width: 0 !important;
             opacity: 0;
-            padding: 0 !important;
+            pointer-events: none;
         }
         .col-pp.col-visible, .col-total.col-visible {
             opacity: 1;
+        }
+        /* Grid container transition for smooth column expand/collapse */
+        .t-row.col-animating {
+            transition: grid-template-columns 0.35s cubic-bezier(.22,.68,0,1.15);
         }
 
         /* Flip effect for JUGADOR/EQUIPO header text */
@@ -1859,6 +1859,13 @@
             let _prevShowPP    = null;
             let _prevShowTotal = null;
 
+            function buildGridCols(showPP, showTotal) {
+                // PP col uses '0px' when hidden so grid doesn't reserve space
+                const pp    = showPP    ? '45px' : '0px';
+                const total = showTotal ? '65px' : '0px';
+                return `40px 45px 1fr 70px ${pp} 45px ${total}`;
+            }
+
             function applyColumnVisibility() {
                 const cfg = window.OverlayConfig?.get?.() || {};
                 const showPP    = cfg?.columns?.showPP    ?? true;
@@ -1866,42 +1873,24 @@
 
                 const ppChanged    = _prevShowPP    !== showPP;
                 const totalChanged = _prevShowTotal !== showTotal;
+                const anyChanged   = ppChanged || totalChanged;
                 _prevShowPP    = showPP;
                 _prevShowTotal = showTotal;
 
-                // Animate PP columns
+                const gridVal = buildGridCols(showPP, showTotal);
+
+                // Fade cells in/out
                 document.querySelectorAll('.col-pp').forEach(el => {
                     if (showPP) {
-                        // Reveal: ensure display, then transition to full width
-                        el.style.display = '';
-                        el.style.maxWidth = '';
-                        // Force reflow then add visible class
-                        el.getBoundingClientRect();
                         el.classList.remove('col-hidden');
                         el.classList.add('col-visible');
                     } else {
-                        // Hide with slide-out: collapse width then hide
                         el.classList.remove('col-visible');
                         el.classList.add('col-hidden');
-                        // After transition completes, set display none
-                        if (ppChanged) {
-                            const onTransitionEnd = () => {
-                                if (el.classList.contains('col-hidden')) {
-                                    // keep display '' but collapsed via max-width
-                                }
-                                el.removeEventListener('transitionend', onTransitionEnd);
-                            };
-                            el.addEventListener('transitionend', onTransitionEnd, { once: true });
-                        }
                     }
                 });
-
-                // Animate PTS (total) columns
                 document.querySelectorAll('.col-total').forEach(el => {
                     if (showTotal) {
-                        el.style.display = '';
-                        el.style.maxWidth = '';
-                        el.getBoundingClientRect();
                         el.classList.remove('col-hidden');
                         el.classList.add('col-visible');
                     } else {
@@ -1910,37 +1899,21 @@
                     }
                 });
 
-                // Animate grid template columns change
-                const animateGrid = (fromCols, toCols) => {
-                    document.querySelectorAll('.t-row').forEach(row => {
-                        row.style.transition = 'grid-template-columns 0.35s cubic-bezier(.22,.68,0,1.15)';
-                        row.style.gridTemplateColumns = toCols;
+                // Animate grid-template-columns on each row
+                document.querySelectorAll('.t-row').forEach(row => {
+                    if (anyChanged) {
+                        row.classList.add('col-animating');
+                        row.style.gridTemplateColumns = gridVal;
                         const onEnd = () => {
-                            row.style.transition = '';
+                            row.classList.remove('col-animating');
                             row.removeEventListener('transitionend', onEnd);
                         };
                         row.addEventListener('transitionend', onEnd, { once: true });
-                        setTimeout(() => { row.style.transition = ''; }, 450);
-                    });
-                };
-
-                const cols = ['40px', '45px', '1fr', '70px'];
-                if (showPP)    cols.push('45px');
-                cols.push('45px');
-                if (showTotal) cols.push('65px');
-                const gridVal = cols.join(' ');
-
-                if (ppChanged || totalChanged) {
-                    document.querySelectorAll('.t-row').forEach(row => {
-                        row.style.transition = 'grid-template-columns 0.35s cubic-bezier(.22,.68,0,1.15)';
+                        setTimeout(() => row.classList.remove('col-animating'), 450);
+                    } else {
                         row.style.gridTemplateColumns = gridVal;
-                        setTimeout(() => { row.style.transition = ''; }, 450);
-                    });
-                } else {
-                    document.querySelectorAll('.t-row').forEach(row => {
-                        row.style.gridTemplateColumns = gridVal;
-                    });
-                }
+                    }
+                });
             }
 
             function rebuildPlayersFromSnapshot(allinfo) {
