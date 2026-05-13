@@ -504,46 +504,6 @@
             transition: opacity 0.4s ease, transform 0.4s ease;
         }
 
-        /* Column slide-in/slide-out for PP and PTS */
-        .col-pp, .col-total {
-            overflow: hidden;
-            transition: opacity 0.28s ease;
-        }
-        .col-pp.col-hidden, .col-total.col-hidden {
-            opacity: 0;
-            pointer-events: none;
-        }
-        .col-pp.col-visible, .col-total.col-visible {
-            opacity: 1;
-        }
-        /* Grid container transition for smooth column expand/collapse */
-        .t-row.col-animating {
-            transition: grid-template-columns 0.35s cubic-bezier(.22,.68,0,1.15);
-        }
-
-        /* Flip effect for JUGADOR/EQUIPO header text */
-        .t-equipo-flip-wrapper {
-            display: inline-block;
-            perspective: 400px;
-        }
-        .t-equipo-flip-inner {
-            display: inline-block;
-            transition: transform 0.18s ease-in;
-            transform-style: preserve-3d;
-            backface-visibility: hidden;
-        }
-        .t-equipo-flip-inner.flipping-out {
-            transform: rotateY(90deg);
-        }
-        .t-equipo-flip-inner.flip-in {
-            transform: rotateY(-90deg);
-            transition: none;
-        }
-        .t-equipo-flip-inner.flip-settling {
-            transform: rotateY(0deg);
-            transition: transform 0.18s ease-out;
-        }
-
         #tableHeader,
         #tableBody .t-row,
         .nomenclatura-centrada {
@@ -614,7 +574,7 @@
             <div id="tableHeader" class="t-row">
                 <div class="t-cell">POS</div>
                 <div class="t-cell"></div>
-                <div class="t-cell t-equipo"><span class="t-equipo-flip-wrapper"><span class="t-equipo-flip-inner">EQUIPO</span></span></div>
+                <div class="t-cell t-equipo">EQUIPO</div>
                 <div class="t-cell"></div>
                 <div class="t-cell col-pp">PP</div>
                 <div class="t-cell">ELIM</div>
@@ -718,50 +678,25 @@
                 if (_initMode) { CURRENT_MODE = _initMode; }
             }
 
-            function flipHeaderLabel(newText) {
-                const flipInner = document.querySelector('#tableHeader .t-equipo-flip-inner');
-                if (!flipInner) {
-                    // Fallback: no flip wrapper found, set directly
-                    const headerLabel = document.querySelector('#tableHeader .t-equipo');
-                    if (headerLabel) headerLabel.textContent = newText;
-                    return;
-                }
-                // Phase 1: flip out (rotate to 90deg, text disappears)
-                flipInner.classList.remove('flip-in', 'flip-settling');
-                flipInner.classList.add('flipping-out');
-                flipInner.addEventListener('transitionend', () => {
-                    // Phase 2: swap text, jump to -90deg (instant, no transition)
-                    flipInner.textContent = newText;
-                    flipInner.classList.remove('flipping-out');
-                    flipInner.classList.add('flip-in');
-                    // Force reflow so the browser registers the -90deg state
-                    flipInner.getBoundingClientRect();
-                    // Phase 3: animate back to 0deg
-                    flipInner.classList.remove('flip-in');
-                    flipInner.classList.add('flip-settling');
-                    flipInner.addEventListener('transitionend', () => {
-                        flipInner.classList.remove('flip-settling');
-                    }, { once: true });
-                }, { once: true });
-            }
-
             function syncDisplayModeUI() {
                 if (!window.OverlayConfig) return;
                 const cfg = window.OverlayConfig.get();
                 const newMode = cfg.display?.displayMode || 'team';
                 if (newMode !== CURRENT_MODE) {
                     CURRENT_MODE = newMode;
-                    const newLabel = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
-                    flipHeaderLabel(newLabel);
+                    const headerLabel = document.querySelector('#tableHeader .t-equipo');
+                    if (headerLabel) {
+                        headerLabel.textContent = '' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
+                    }
                     if (typeof CURRENT_SNAPSHOT !== 'undefined' && CURRENT_SNAPSHOT && !renderScheduled) {
                         scheduleRender();
                     }
                 } else {
-                    const flipInner = document.querySelector('#tableHeader .t-equipo-flip-inner');
-                    if (flipInner) {
-                        const expectedText = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
-                        if (flipInner.textContent !== expectedText) {
-                            flipInner.textContent = expectedText;
+                    const headerLabel = document.querySelector('#tableHeader .t-equipo');
+                    if (headerLabel) {
+                        const expectedText = '' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
+                        if (headerLabel.textContent !== expectedText) {
+                            headerLabel.textContent = expectedText;
                         }
                     }
                 }
@@ -1767,10 +1702,9 @@
             }
 
             async function renderTable(teams) {
-                const expectedLabel = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === "individual" ? "JUGADOR" : "EQUIPO");
-                const flipInner = document.querySelector('#tableHeader .t-equipo-flip-inner');
-                if (flipInner && flipInner.textContent !== expectedLabel) {
-                    flipInner.textContent = expectedLabel;
+                const headerLabel = document.querySelector('#tableHeader .t-equipo');
+                if (headerLabel) {
+                    headerLabel.textContent = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === "individual" ? "JUGADOR" : "EQUIPO");
                 }
                 const currentGameID = CURRENT_SNAPSHOT?.GameID || CURRENT_SNAPSHOT?.allinfo?.GameID || null;
                 if (currentGameID && currentGameID !== lastRenderedGameID) {
@@ -1855,64 +1789,26 @@
                 applyColumnVisibility();
             }
 
-            // Track previous column state to detect changes
-            let _prevShowPP    = null;
-            let _prevShowTotal = null;
-
-            function buildGridCols(showPP, showTotal) {
-                // PP col uses '0px' when hidden so grid doesn't reserve space
-                const pp    = showPP    ? '45px' : '0px';
-                const total = showTotal ? '65px' : '0px';
-                return `40px 45px 1fr 70px ${pp} 45px ${total}`;
-            }
-
             function applyColumnVisibility() {
                 const cfg = window.OverlayConfig?.get?.() || {};
                 const showPP    = cfg?.columns?.showPP    ?? true;
                 const showTotal = cfg?.columns?.showTotal ?? true;
 
-                const ppChanged    = _prevShowPP    !== showPP;
-                const totalChanged = _prevShowTotal !== showTotal;
-                const anyChanged   = ppChanged || totalChanged;
-                _prevShowPP    = showPP;
-                _prevShowTotal = showTotal;
-
-                const gridVal = buildGridCols(showPP, showTotal);
-
-                // Fade cells in/out
                 document.querySelectorAll('.col-pp').forEach(el => {
-                    if (showPP) {
-                        el.classList.remove('col-hidden');
-                        el.classList.add('col-visible');
-                    } else {
-                        el.classList.remove('col-visible');
-                        el.classList.add('col-hidden');
-                    }
+                    el.style.display = showPP ? '' : 'none';
                 });
                 document.querySelectorAll('.col-total').forEach(el => {
-                    if (showTotal) {
-                        el.classList.remove('col-hidden');
-                        el.classList.add('col-visible');
-                    } else {
-                        el.classList.remove('col-visible');
-                        el.classList.add('col-hidden');
-                    }
+                    el.style.display = showTotal ? '' : 'none';
                 });
 
-                // Animate grid-template-columns on each row
+                const cols = ['40px', '45px', '1fr', '70px'];
+                if (showPP)    cols.push('45px');
+                cols.push('45px');
+                if (showTotal) cols.push('65px');
+                const gridVal = cols.join(' ');
+
                 document.querySelectorAll('.t-row').forEach(row => {
-                    if (anyChanged) {
-                        row.classList.add('col-animating');
-                        row.style.gridTemplateColumns = gridVal;
-                        const onEnd = () => {
-                            row.classList.remove('col-animating');
-                            row.removeEventListener('transitionend', onEnd);
-                        };
-                        row.addEventListener('transitionend', onEnd, { once: true });
-                        setTimeout(() => row.classList.remove('col-animating'), 450);
-                    } else {
-                        row.style.gridTemplateColumns = gridVal;
-                    }
+                    row.style.gridTemplateColumns = gridVal;
                 });
             }
 
@@ -2345,9 +2241,9 @@
                 if (!window.OverlayConfig) return;
                 const cur = window.OverlayConfig.get();
 
-                const flipInner = document.querySelector('#tableHeader .t-equipo-flip-inner');
-                if (flipInner) {
-                    flipInner.textContent = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
+                const headerLabel = document.querySelector('#tableHeader .t-equipo');
+                if (headerLabel) {
+                    headerLabel.textContent = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
                 }
 
                 if (!cur.columns) {
