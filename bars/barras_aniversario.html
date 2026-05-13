@@ -91,7 +91,7 @@
             font-weight: bold;
             border-radius: 0px;
             transform-origin: top center;
-            min-height: 32px;
+            height: 32px;
         }
         .t-cell {
             padding: 4px 2px;
@@ -150,16 +150,14 @@
 
         .col-pp, .col-total {
             overflow: hidden;
-            transition: opacity 0.25s ease, transform 0.25s ease;
+            transition: none;
         }
         .col-hidden {
             opacity: 0 !important;
-            transform: translateX(20px) !important;
             pointer-events: none;
         }
         .col-visible {
             opacity: 1;
-            transform: translateX(0);
         }
 
         @keyframes slideInRight {
@@ -792,6 +790,7 @@
             let currentPanelIndex = 0;
             let panelStartTime = 0;
             let lastPanelSize = 0;
+            let lastOverlayWidth = null;
 
             const rankToPPP = {
                 1:10, 2:8, 3:6, 4:5, 5:4, 6:3, 7:2, 8:1, 9:1, 10:1
@@ -1871,18 +1870,18 @@
                 const gridVal = cols.join(' ');
 
                 const header = document.getElementById('tableHeader');
-                header.style.display = 'none';
+                header.style.visibility = 'hidden';
                 void header.offsetHeight;
                 header.style.gridTemplateColumns = gridVal;
-                header.style.display = 'grid';
+                header.style.visibility = 'visible';
                 void header.getBoundingClientRect();
 
                 const bodyRows = document.querySelectorAll('#tableBody .t-row');
                 bodyRows.forEach(row => {
-                    row.style.display = 'none';
+                    row.style.visibility = 'hidden';
                     void row.offsetHeight;
                     row.style.gridTemplateColumns = gridVal;
-                    row.style.display = 'grid';
+                    row.style.visibility = 'visible';
                     void row.getBoundingClientRect();
                 });
 
@@ -1892,9 +1891,12 @@
                         (showPP ? 45 : 0) +
                         parseInt(elimWidth) +
                         (showTotal ? 65 : 0);
-                    overlay.style.width = totalFixed + 'px';
-                    overlay.style.minWidth = totalFixed + 'px';
-                    overlay.style.maxWidth = totalFixed + 'px';
+                    if (lastOverlayWidth !== totalFixed) {
+                        lastOverlayWidth = totalFixed;
+                        overlay.style.width = totalFixed + 'px';
+                        overlay.style.minWidth = totalFixed + 'px';
+                        overlay.style.maxWidth = totalFixed + 'px';
+                    }
                 }
             }
 
