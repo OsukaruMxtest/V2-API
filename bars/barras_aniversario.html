@@ -66,7 +66,6 @@
             background: transparent;
             visibility: visible;
             opacity: 1;
-            transition: max-width 0.35s cubic-bezier(.4,0,.2,1), width 0.35s cubic-bezier(.4,0,.2,1);
         }
         .overlay-content.large-table-bg {
             background-image: none;
@@ -87,7 +86,7 @@
         }
         .t-row {
             display: grid;
-            grid-template-columns: 40px 45px 1fr 70px 45px 45px 65px;
+            grid-template-columns: 40px 45px 170px 70px 45px 45px 65px;
             width: 100%;
             font-weight: bold;
             border-radius: 0px;
@@ -113,8 +112,10 @@
         }
         .t-name,
         .t-equipo {
+            white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            min-width: 0;
         }
         #tableHeader {
             background-color: #1D1A73 !important;
@@ -284,7 +285,6 @@
             width: 100%;
             flex-wrap: wrap;
             border: 1px solid var(--primary-bright);
-            transition: max-width 0.35s cubic-bezier(.4,0,.2,1);
         }
         .overlay-content:not(.large-table-bg) .nomenclatura-centrada {
             background-color: transparent;
@@ -1862,7 +1862,7 @@
                 const cols = [
                     '40px',
                     '45px',
-                    'minmax(120px,1fr)',
+                    '170px',
                     '70px',
                     showPP ? '45px' : '0px',
                     elimWidth,
@@ -1875,6 +1875,7 @@
                 void header.offsetHeight;
                 header.style.gridTemplateColumns = gridVal;
                 header.style.display = 'grid';
+                void header.getBoundingClientRect();
 
                 const bodyRows = document.querySelectorAll('#tableBody .t-row');
                 bodyRows.forEach(row => {
@@ -1882,11 +1883,12 @@
                     void row.offsetHeight;
                     row.style.gridTemplateColumns = gridVal;
                     row.style.display = 'grid';
+                    void row.getBoundingClientRect();
                 });
 
                 const overlay = document.querySelector('.overlay-content');
                 if (overlay) {
-                    const totalFixed = 40 + 45 + 120 + 70 +
+                    const totalFixed = 40 + 45 + 170 + 70 +
                         (showPP ? 45 : 0) +
                         parseInt(elimWidth) +
                         (showTotal ? 65 : 0);
