@@ -86,7 +86,7 @@
         }
         .t-row {
             display: grid;
-            grid-template-columns: 38px 42px 155px 64px 42px 42px 56px;
+            grid-template-columns: 38px 42px 148px 64px 46px 48px 64px;
             width: 100%;
             font-weight: bold;
             border-radius: 0px;
@@ -94,7 +94,7 @@
             height: 32px;
         }
         .t-cell {
-            padding: 4px 2px;
+            padding: 4px 4px 4px 2px;
             text-align: center;
             white-space: nowrap;
             overflow: hidden;
@@ -605,6 +605,11 @@
         #tableBody .t-row .t-elim {
             text-shadow: 1px 1px 0px rgba(0,0,0,0.6);
             font-weight: bold;
+        }
+        .t-puntos,
+        .t-elim,
+        .t-pp {
+            overflow: visible;
         }
     </style>
 </head>
@@ -1166,7 +1171,7 @@
 
             function applyVisibility() {
                 if (isAnimating) {
-                    // Don't re-queue if we're hiding — the animation will finish on its own
+                    requestAnimationFrame(applyVisibility);
                     return;
                 }
 
@@ -1391,26 +1396,6 @@
                         if (payload.mode) {
                             window.OverlayConfig?.set({ display: { displayMode: payload.mode } });
                         }
-                        break;
-                    case 'col_pp_on':
-                        window.OverlayConfig?.set({ columns: { showPP: true } });
-                        applyColumnVisibility();
-                        if (CURRENT_SNAPSHOT && !renderScheduled) scheduleRender();
-                        break;
-                    case 'col_pp_off':
-                        window.OverlayConfig?.set({ columns: { showPP: false } });
-                        applyColumnVisibility();
-                        if (CURRENT_SNAPSHOT && !renderScheduled) scheduleRender();
-                        break;
-                    case 'col_total_on':
-                        window.OverlayConfig?.set({ columns: { showTotal: true } });
-                        applyColumnVisibility();
-                        if (CURRENT_SNAPSHOT && !renderScheduled) scheduleRender();
-                        break;
-                    case 'col_total_off':
-                        window.OverlayConfig?.set({ columns: { showTotal: false } });
-                        applyColumnVisibility();
-                        if (CURRENT_SNAPSHOT && !renderScheduled) scheduleRender();
                         break;
                     case 'set_scoring': {
                         const scoringPatch = {};
@@ -1878,32 +1863,38 @@
                     }
                 });
 
-                const elimWidth = (!showPP && !showTotal) ? '54px' : '42px';
                 const cols = [
                     '38px',
                     '42px',
-                    '155px',
+                    '148px',
                     '64px',
-                    showPP ? '42px' : '0px',
-                    elimWidth,
-                    showTotal ? '56px' : '0px'
+                    showPP ? '46px' : '0px',
+                    showPP && showTotal ? '48px' : '54px',
+                    showTotal ? '64px' : '0px'
                 ];
                 const gridVal = cols.join(' ');
 
                 const header = document.getElementById('tableHeader');
+                header.style.visibility = 'hidden';
+                void header.offsetHeight;
                 header.style.gridTemplateColumns = gridVal;
+                header.style.visibility = 'visible';
 
                 const bodyRows = document.querySelectorAll('#tableBody .t-row');
                 bodyRows.forEach(row => {
+                    row.style.visibility = 'hidden';
+                    void row.offsetHeight;
                     row.style.gridTemplateColumns = gridVal;
+                    row.style.visibility = 'visible';
                 });
 
                 const overlay = document.querySelector('.overlay-content');
                 if (overlay) {
-                    const totalFixed = 38 + 42 + 155 + 64 +
-                        (showPP ? 42 : 0) +
-                        parseInt(elimWidth) +
-                        (showTotal ? 56 : 0);
+                    const elimW = showPP && showTotal ? 48 : 54;
+                    const totalFixed = 38 + 42 + 148 + 64 +
+                        (showPP ? 46 : 0) +
+                        elimW +
+                        (showTotal ? 64 : 0);
                     if (lastOverlayWidth !== totalFixed) {
                         lastOverlayWidth = totalFixed;
                         overlay.style.width = totalFixed + 'px';
