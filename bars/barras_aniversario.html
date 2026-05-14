@@ -86,12 +86,12 @@
         }
         .t-row {
             display: grid;
-            grid-template-columns: 38px 42px 148px 64px 46px 48px 64px;
             width: 100%;
             font-weight: bold;
             border-radius: 0px;
             transform-origin: top center;
             height: 32px;
+            transition: grid-template-columns 0.2s ease;
         }
         .t-cell {
             padding: 4px 4px 4px 2px;
@@ -126,6 +126,8 @@
             background-color: #1D1A73 !important;
             color: var(--header-text-color);
             font-weight: 700;
+            overflow: visible;
+            transition: grid-template-columns 0.2s ease;
         }
         #tableHeader .t-cell {
             white-space: nowrap;
@@ -139,7 +141,6 @@
             height: 36px;
             padding-inline: 6px;
         }
-        #tableHeader,
         #tableBody .t-row {
             overflow: hidden;
         }
@@ -155,15 +156,13 @@
         .t-row.eliminado { opacity: 0.45; color: #aaa; }
 
         .col-pp, .col-total {
-            overflow: hidden;
             transition: none;
         }
         .col-hidden {
-            opacity: 0 !important;
-            pointer-events: none;
+            display: none !important;
         }
         .col-visible {
-            opacity: 1;
+            display: flex;
         }
 
         @keyframes slideInRight {
@@ -1861,10 +1860,13 @@
 
             function applyColumnVisibility() {
                 const cfg = window.OverlayConfig?.get?.() || {};
-                const showPP    = cfg?.columns?.showPP    ?? true;
-                const showTotal = cfg?.columns?.showTotal ?? true;
+                const showPP = cfg.columns?.showPP ?? true;
+                const showTotal = cfg.columns?.showTotal ?? true;
 
-                document.querySelectorAll('.col-pp').forEach(el => {
+                // Toggle visibility of PP and Total columns (cells)
+                const ppCells = document.querySelectorAll('.col-pp');
+                const totalCells = document.querySelectorAll('.col-total');
+                ppCells.forEach(el => {
                     if (showPP) {
                         el.classList.remove('col-hidden');
                         el.classList.add('col-visible');
@@ -1873,7 +1875,7 @@
                         el.classList.remove('col-visible');
                     }
                 });
-                document.querySelectorAll('.col-total').forEach(el => {
+                totalCells.forEach(el => {
                     if (showTotal) {
                         el.classList.remove('col-hidden');
                         el.classList.add('col-visible');
@@ -1883,32 +1885,46 @@
                     }
                 });
 
-                const elimWidth = (!showPP && !showTotal) ? '54px' : '48px';
-                const cols = [
-                    '38px',
-                    '42px',
-                    '148px',
-                    '64px',
-                    showPP ? '46px' : '0px',
-                    elimWidth,
-                    showTotal ? '64px' : '0px'
+                // Determine ELIM column width based on which of PP/PTS are hidden
+                let elimWidth = '48px'; // default when both visible
+                if (!showPP && showTotal) {
+                    elimWidth = '56px';
+                } else if (showPP && !showTotal) {
+                    elimWidth = '56px';
+                } else if (!showPP && !showTotal) {
+                    elimWidth = '72px';
+                }
+
+                // Build grid template columns only for visible columns in order
+                const columns = [
+                    '38px',   // POS
+                    '42px',   // empty/logo?
+                    '148px',  // EQUIPO / JUGADOR
+                    '64px'    // health bars
                 ];
-                const gridVal = cols.join(' ');
+                if (showPP) {
+                    columns.push('46px'); // PP
+                }
+                columns.push(elimWidth);  // ELIM
+                if (showTotal) {
+                    columns.push('64px'); // PTS
+                }
+                const gridVal = columns.join(' ');
 
                 const header = document.getElementById('tableHeader');
-                header.style.gridTemplateColumns = gridVal;
-
+                if (header) header.style.gridTemplateColumns = gridVal;
                 const bodyRows = document.querySelectorAll('#tableBody .t-row');
                 bodyRows.forEach(row => {
                     row.style.gridTemplateColumns = gridVal;
                 });
 
+                // Update overlay width
                 const overlay = document.querySelector('.overlay-content');
                 if (overlay) {
-                    const totalFixed = 38 + 42 + 148 + 64 +
-                        (showPP ? 46 : 0) +
-                        parseInt(elimWidth) +
-                        (showTotal ? 64 : 0);
+                    let totalFixed = 38 + 42 + 148 + 64;
+                    if (showPP) totalFixed += 46;
+                    totalFixed += parseInt(elimWidth);
+                    if (showTotal) totalFixed += 64;
                     if (lastOverlayWidth !== totalFixed) {
                         lastOverlayWidth = totalFixed;
                         overlay.style.width = totalFixed + 'px';
