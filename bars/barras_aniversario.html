@@ -86,7 +86,7 @@
         }
         .t-row {
             display: grid;
-            grid-template-columns: 38px 42px 155px 64px 42px 42px 56px;
+            grid-template-columns: 38px 42px 148px 64px 46px 48px 64px;
             width: 100%;
             font-weight: bold;
             border-radius: 0px;
@@ -94,7 +94,7 @@
             height: 32px;
         }
         .t-cell {
-            padding: 4px 2px;
+            padding: 4px 4px 4px 2px;
             text-align: center;
             white-space: nowrap;
             overflow: hidden;
@@ -116,6 +116,11 @@
             overflow: hidden;
             text-overflow: ellipsis;
             min-width: 0;
+        }
+        .t-puntos,
+        .t-elim,
+        .t-pp {
+            overflow: visible;
         }
         #tableHeader {
             background-color: #1D1A73 !important;
@@ -724,7 +729,7 @@
                 const newMode = cfg.display?.displayMode || 'team';
                 const headerLabel = document.querySelector('#tableHeader .t-equipo');
                 if (!headerLabel) return;
-                const expectedText = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (newMode === 'individual' ? 'JUGADOR' : 'EQUIPO');
+                const expectedText = '' + (newMode === 'individual' ? 'JUGADOR' : 'EQUIPO');
                 if (CURRENT_MODE !== newMode) {
                     CURRENT_MODE = newMode;
                     if (headerLabel.textContent !== expectedText) {
@@ -1166,7 +1171,6 @@
 
             function applyVisibility() {
                 if (isAnimating) {
-                    // Don't re-queue if we're hiding — the animation will finish on its own
                     return;
                 }
 
@@ -1766,7 +1770,7 @@
             async function renderTable(teams) {
                 const headerLabel = document.querySelector('#tableHeader .t-equipo');
                 if (headerLabel) {
-                    const expectedText = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === "individual" ? "JUGADOR" : "EQUIPO");
+                    const expectedText = '' + (CURRENT_MODE === "individual" ? "JUGADOR" : "EQUIPO");
                     if (headerLabel.textContent !== expectedText) {
                         headerLabel.textContent = expectedText;
                     }
@@ -1878,15 +1882,15 @@
                     }
                 });
 
-                const elimWidth = (!showPP && !showTotal) ? '54px' : '42px';
+                const elimWidth = (!showPP && !showTotal) ? '54px' : '48px';
                 const cols = [
                     '38px',
                     '42px',
-                    '155px',
+                    '148px',
                     '64px',
-                    showPP ? '42px' : '0px',
+                    showPP ? '46px' : '0px',
                     elimWidth,
-                    showTotal ? '56px' : '0px'
+                    showTotal ? '64px' : '0px'
                 ];
                 const gridVal = cols.join(' ');
 
@@ -1900,10 +1904,10 @@
 
                 const overlay = document.querySelector('.overlay-content');
                 if (overlay) {
-                    const totalFixed = 38 + 42 + 155 + 64 +
-                        (showPP ? 42 : 0) +
+                    const totalFixed = 38 + 42 + 148 + 64 +
+                        (showPP ? 46 : 0) +
                         parseInt(elimWidth) +
-                        (showTotal ? 56 : 0);
+                        (showTotal ? 64 : 0);
                     if (lastOverlayWidth !== totalFixed) {
                         lastOverlayWidth = totalFixed;
                         overlay.style.width = totalFixed + 'px';
@@ -2344,7 +2348,7 @@
 
                 const headerLabel = document.querySelector('#tableHeader .t-equipo');
                 if (headerLabel) {
-                    headerLabel.textContent = '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
+                    headerLabel.textContent = '' + (CURRENT_MODE === 'individual' ? 'JUGADOR' : 'EQUIPO');
                 }
 
                 if (!cur.columns) {
