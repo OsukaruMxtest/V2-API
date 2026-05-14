@@ -98,8 +98,7 @@
             text-align: center;
             white-space: nowrap;
             overflow: hidden;
-            text-overflow: ellipsis;
-            padding-right: 2px;
+            text-overflow: clip;
             font-size: var(--table-font-size);
             display: flex;
             align-items: center;
@@ -705,6 +704,7 @@
             return `<img${cls}${style} src="${LOGO_BASE}${padded}.png" onerror="this.src='${LOGO_BASE}default.png'">`;
         }
 
+        window.IS_SNAPSHOT_LEADER = true;
         (function() {
             const OBSERVER_ENDPOINTS = [
                 "https://v2-api-production-db45.up.railway.app/getmatchsnapshot"
@@ -762,6 +762,7 @@
             let CURRENT_OBSERVER_INDEX = 0;
             let renderScheduled = false;
             let lastLoggedObserverIndex = -1;
+            let LAST_BROADCAST_KEY = null;
             let lastOrderedTeamIds = [];
 
             let lastErrorLogTime = 0;
@@ -797,7 +798,14 @@
 
             const DEBUG = window.DEBUG_OVERLAY === true;
 
-            
+            let snapshotChannel = null;
+            let commandChannel = null;
+            try {
+                snapshotChannel = new BroadcastChannel('pubgm_snapshot');
+            } catch (e) { console.error('[barras] BroadcastChannel error', e); }
+            try {
+                commandChannel = new BroadcastChannel('pubgm_commands');
+            } catch (e) { console.error('[barras] commandChannel error', e); }
 
             function updateUtilities(container, utilities) {
                 const u = utilities || { frag:0, smoke:0, molotov:0, flash:0 };
@@ -1158,7 +1166,7 @@
 
             function applyVisibility() {
                 if (isAnimating) {
-                    requestAnimationFrame(applyVisibility);
+                    // Don't re-queue if we're hiding — the animation will finish on its own
                     return;
                 }
 
@@ -1326,6 +1334,14 @@
                     lastOverlayCommandTimestamp = data.timestamp;
                     const cmd = data.cmd || data.command;
                     if (cmd) handleOverlayCommand(cmd, data);
+                    if (commandChannel?.postMessage) {
+                        const rebroadcastPayload = { type: 'command', cmd, timestamp: data.timestamp };
+                        if (cmd === 'set_display_mode') {
+                            rebroadcastPayload.mode = data.mode === 'individual' ? 'individual' : 'team';
+                            rebroadcastPayload.command = cmd;
+                        }
+                        commandChannel.postMessage(rebroadcastPayload);
+                    }
                 } catch (e) {
                     logError('Error en comando overlay:', e);
                 } finally {
@@ -1375,6 +1391,26 @@
                         if (payload.mode) {
                             window.OverlayConfig?.set({ display: { displayMode: payload.mode } });
                         }
+                        break;
+                    case 'col_pp_on':
+                        window.OverlayConfig?.set({ columns: { showPP: true } });
+                        applyColumnVisibility();
+                        if (CURRENT_SNAPSHOT && !renderScheduled) scheduleRender();
+                        break;
+                    case 'col_pp_off':
+                        window.OverlayConfig?.set({ columns: { showPP: false } });
+                        applyColumnVisibility();
+                        if (CURRENT_SNAPSHOT && !renderScheduled) scheduleRender();
+                        break;
+                    case 'col_total_on':
+                        window.OverlayConfig?.set({ columns: { showTotal: true } });
+                        applyColumnVisibility();
+                        if (CURRENT_SNAPSHOT && !renderScheduled) scheduleRender();
+                        break;
+                    case 'col_total_off':
+                        window.OverlayConfig?.set({ columns: { showTotal: false } });
+                        applyColumnVisibility();
+                        if (CURRENT_SNAPSHOT && !renderScheduled) scheduleRender();
                         break;
                     case 'set_scoring': {
                         const scoringPatch = {};
@@ -1473,6 +1509,16 @@
                         if (!externalVisible) {
                             lastHiddenSnapshot = snapshot;
                         }
+
+                        if (snapshotChannel?.postMessage && newKey !== LAST_BROADCAST_KEY) {
+                            LAST_BROADCAST_KEY = newKey;
+                            snapshotChannel.postMessage({
+                                type: 'snapshot',
+                                data: snapshot,
+                                timestamp: Date.now()
+                            });
+                        }
+
                         scheduleRender();
                     }
                 } catch (e) {
@@ -1562,6 +1608,12 @@
                     }
                     if (window.OverlayBroadcast?.broadcastSnapshot) {
                         window.OverlayBroadcast.broadcastSnapshot(mock);
+                    } else if (snapshotChannel?.postMessage) {
+                        snapshotChannel.postMessage({
+                            type: 'snapshot',
+                            data: mock,
+                            timestamp: Date.now()
+                        });
                     }
                     scheduleRender();
                 };
@@ -1839,17 +1891,11 @@
                 const gridVal = cols.join(' ');
 
                 const header = document.getElementById('tableHeader');
-                header.style.visibility = 'hidden';
-                void header.offsetHeight;
                 header.style.gridTemplateColumns = gridVal;
-                header.style.visibility = 'visible';
 
                 const bodyRows = document.querySelectorAll('#tableBody .t-row');
                 bodyRows.forEach(row => {
-                    row.style.visibility = 'hidden';
-                    void row.offsetHeight;
                     row.style.gridTemplateColumns = gridVal;
-                    row.style.visibility = 'visible';
                 });
 
                 const overlay = document.querySelector('.overlay-content');
@@ -2265,19 +2311,23 @@
                 }
             }
 
-            if (DEBUG) {
-                startDebugMode();
-            } else {
-                if (!window.__snapshotLoopStarted) {
-                    window.__snapshotLoopStarted = true;
-                    const sleep = ms => new Promise(r => setTimeout(r, ms));
-                    (async function snapshotLoop() {
-                        while (true) {
-                            await updateSnapshotLoop();
-                            await sleep(1000);
-                        }
-                    })();
+            if (window.IS_SNAPSHOT_LEADER) {
+                if (DEBUG) {
+                    startDebugMode();
+                } else {
+                    if (!window.__snapshotLoopStarted) {
+                        window.__snapshotLoopStarted = true;
+                        const sleep = ms => new Promise(r => setTimeout(r, ms));
+                        (async function snapshotLoop() {
+                            while (true) {
+                                await updateSnapshotLoop();
+                                await sleep(1000);
+                            }
+                        })();
+                    }
                 }
+            } else {
+                console.log('[barras_aniversario] IS_SNAPSHOT_LEADER=false — escuchando BroadcastChannel');
             }
 
             if (!window.__overlayCommandPollingStarted) {
