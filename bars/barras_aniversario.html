@@ -94,11 +94,11 @@
             height: 32px;
         }
         .t-cell {
-            padding: 4px 4px;
+            padding: 4px 2px;
             text-align: center;
             white-space: nowrap;
             overflow: hidden;
-            text-overflow: ellipsis;
+            text-overflow: clip;
             font-size: var(--table-font-size);
             display: flex;
             align-items: center;
@@ -1166,7 +1166,7 @@
 
             function applyVisibility() {
                 if (isAnimating) {
-                    requestAnimationFrame(applyVisibility);
+                    // Don't re-queue if we're hiding — the animation will finish on its own
                     return;
                 }
 
@@ -1391,6 +1391,26 @@
                         if (payload.mode) {
                             window.OverlayConfig?.set({ display: { displayMode: payload.mode } });
                         }
+                        break;
+                    case 'col_pp_on':
+                        window.OverlayConfig?.set({ columns: { showPP: true } });
+                        applyColumnVisibility();
+                        if (CURRENT_SNAPSHOT && !renderScheduled) scheduleRender();
+                        break;
+                    case 'col_pp_off':
+                        window.OverlayConfig?.set({ columns: { showPP: false } });
+                        applyColumnVisibility();
+                        if (CURRENT_SNAPSHOT && !renderScheduled) scheduleRender();
+                        break;
+                    case 'col_total_on':
+                        window.OverlayConfig?.set({ columns: { showTotal: true } });
+                        applyColumnVisibility();
+                        if (CURRENT_SNAPSHOT && !renderScheduled) scheduleRender();
+                        break;
+                    case 'col_total_off':
+                        window.OverlayConfig?.set({ columns: { showTotal: false } });
+                        applyColumnVisibility();
+                        if (CURRENT_SNAPSHOT && !renderScheduled) scheduleRender();
                         break;
                     case 'set_scoring': {
                         const scoringPatch = {};
