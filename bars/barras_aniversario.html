@@ -92,18 +92,19 @@
             transform-origin: top center;
             height: 32px;
             transition: grid-template-columns 0.2s ease;
+            align-items: stretch;
         }
         .t-cell {
             padding: 4px 4px 4px 2px;
             text-align: center;
             white-space: nowrap;
-            overflow: hidden;
-            text-overflow: clip;
+            overflow: visible;
+            text-overflow: ellipsis;
             font-size: var(--table-font-size);
             display: flex;
             align-items: center;
             justify-content: center;
-            min-width: 0;
+            min-width: auto;
         }
         .t-equipo {
             text-align: left;
@@ -115,12 +116,16 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            min-width: 0;
+            min-width: auto;
         }
         .t-puntos,
         .t-elim,
         .t-pp {
-            overflow: visible;
+            flex-shrink: 0;
+            overflow: visible !important;
+            min-width: max-content;
+            padding-inline: 8px;
+            outline: 1px solid rgba(255,0,0,0.25);
         }
         #tableHeader {
             background-color: #1D1A73 !important;
@@ -136,10 +141,14 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            min-width: 0;
+            min-width: auto;
             min-height: 36px;
             height: 36px;
             padding-inline: 6px;
+            contain: layout style;
+        }
+        #tableBody .t-cell {
+            contain: layout style;
         }
         #tableBody .t-row {
             overflow: hidden;
@@ -1886,13 +1895,13 @@
                 });
 
                 // Determine ELIM column width based on which of PP/PTS are hidden
-                let elimWidth = '48px'; // default when both visible
+                let elimWidth = '64px'; // default when both visible
                 if (!showPP && showTotal) {
-                    elimWidth = '56px';
-                } else if (showPP && !showTotal) {
-                    elimWidth = '56px';
-                } else if (!showPP && !showTotal) {
                     elimWidth = '72px';
+                } else if (showPP && !showTotal) {
+                    elimWidth = '72px';
+                } else if (!showPP && !showTotal) {
+                    elimWidth = '84px';
                 }
 
                 // Build grid template columns only for visible columns in order
@@ -1903,11 +1912,11 @@
                     '64px'    // health bars
                 ];
                 if (showPP) {
-                    columns.push('46px'); // PP
+                    columns.push('52px'); // PP
                 }
                 columns.push(elimWidth);  // ELIM
                 if (showTotal) {
-                    columns.push('64px'); // PTS
+                    columns.push('72px'); // PTS
                 }
                 const gridVal = columns.join(' ');
 
@@ -1922,9 +1931,9 @@
                 const overlay = document.querySelector('.overlay-content');
                 if (overlay) {
                     let totalFixed = 38 + 42 + 148 + 64;
-                    if (showPP) totalFixed += 46;
+                    if (showPP) totalFixed += 52;
                     totalFixed += parseInt(elimWidth);
-                    if (showTotal) totalFixed += 64;
+                    if (showTotal) totalFixed += 72;
                     if (lastOverlayWidth !== totalFixed) {
                         lastOverlayWidth = totalFixed;
                         overlay.style.width = totalFixed + 'px';
