@@ -86,7 +86,7 @@
         }
         .t-row {
             display: grid;
-            grid-template-columns: 40px 45px 170px 70px 45px 45px 65px;
+            grid-template-columns: 38px 42px 155px 64px 42px 42px 56px;
             width: 100%;
             font-weight: bold;
             border-radius: 0px;
@@ -98,7 +98,8 @@
             text-align: center;
             white-space: nowrap;
             overflow: hidden;
-            text-overflow: clip;
+            text-overflow: ellipsis;
+            padding-right: 2px;
             font-size: var(--table-font-size);
             display: flex;
             align-items: center;
@@ -704,7 +705,6 @@
             return `<img${cls}${style} src="${LOGO_BASE}${padded}.png" onerror="this.src='${LOGO_BASE}default.png'">`;
         }
 
-        window.IS_SNAPSHOT_LEADER = true;
         (function() {
             const OBSERVER_ENDPOINTS = [
                 "https://v2-api-production-db45.up.railway.app/getmatchsnapshot"
@@ -762,7 +762,6 @@
             let CURRENT_OBSERVER_INDEX = 0;
             let renderScheduled = false;
             let lastLoggedObserverIndex = -1;
-            let LAST_BROADCAST_KEY = null;
             let lastOrderedTeamIds = [];
 
             let lastErrorLogTime = 0;
@@ -798,14 +797,7 @@
 
             const DEBUG = window.DEBUG_OVERLAY === true;
 
-            let snapshotChannel = null;
-            let commandChannel = null;
-            try {
-                snapshotChannel = new BroadcastChannel('pubgm_snapshot');
-            } catch (e) { console.error('[barras] BroadcastChannel error', e); }
-            try {
-                commandChannel = new BroadcastChannel('pubgm_commands');
-            } catch (e) { console.error('[barras] commandChannel error', e); }
+            
 
             function updateUtilities(container, utilities) {
                 const u = utilities || { frag:0, smoke:0, molotov:0, flash:0 };
@@ -1334,14 +1326,6 @@
                     lastOverlayCommandTimestamp = data.timestamp;
                     const cmd = data.cmd || data.command;
                     if (cmd) handleOverlayCommand(cmd, data);
-                    if (commandChannel?.postMessage) {
-                        const rebroadcastPayload = { type: 'command', cmd, timestamp: data.timestamp };
-                        if (cmd === 'set_display_mode') {
-                            rebroadcastPayload.mode = data.mode === 'individual' ? 'individual' : 'team';
-                            rebroadcastPayload.command = cmd;
-                        }
-                        commandChannel.postMessage(rebroadcastPayload);
-                    }
                 } catch (e) {
                     logError('Error en comando overlay:', e);
                 } finally {
@@ -1489,16 +1473,6 @@
                         if (!externalVisible) {
                             lastHiddenSnapshot = snapshot;
                         }
-
-                        if (snapshotChannel?.postMessage && newKey !== LAST_BROADCAST_KEY) {
-                            LAST_BROADCAST_KEY = newKey;
-                            snapshotChannel.postMessage({
-                                type: 'snapshot',
-                                data: snapshot,
-                                timestamp: Date.now()
-                            });
-                        }
-
                         scheduleRender();
                     }
                 } catch (e) {
@@ -1588,12 +1562,6 @@
                     }
                     if (window.OverlayBroadcast?.broadcastSnapshot) {
                         window.OverlayBroadcast.broadcastSnapshot(mock);
-                    } else if (snapshotChannel?.postMessage) {
-                        snapshotChannel.postMessage({
-                            type: 'snapshot',
-                            data: mock,
-                            timestamp: Date.now()
-                        });
                     }
                     scheduleRender();
                 };
@@ -1858,15 +1826,15 @@
                     }
                 });
 
-                const elimWidth = (!showPP && !showTotal) ? '58px' : '45px';
+                const elimWidth = (!showPP && !showTotal) ? '54px' : '42px';
                 const cols = [
-                    '40px',
-                    '45px',
-                    '170px',
-                    '70px',
-                    showPP ? '45px' : '0px',
+                    '38px',
+                    '42px',
+                    '155px',
+                    '64px',
+                    showPP ? '42px' : '0px',
                     elimWidth,
-                    showTotal ? '65px' : '0px'
+                    showTotal ? '56px' : '0px'
                 ];
                 const gridVal = cols.join(' ');
 
@@ -1886,10 +1854,10 @@
 
                 const overlay = document.querySelector('.overlay-content');
                 if (overlay) {
-                    const totalFixed = 40 + 45 + 170 + 70 +
-                        (showPP ? 45 : 0) +
+                    const totalFixed = 38 + 42 + 155 + 64 +
+                        (showPP ? 42 : 0) +
                         parseInt(elimWidth) +
-                        (showTotal ? 65 : 0);
+                        (showTotal ? 56 : 0);
                     if (lastOverlayWidth !== totalFixed) {
                         lastOverlayWidth = totalFixed;
                         overlay.style.width = totalFixed + 'px';
@@ -2297,23 +2265,19 @@
                 }
             }
 
-            if (window.IS_SNAPSHOT_LEADER) {
-                if (DEBUG) {
-                    startDebugMode();
-                } else {
-                    if (!window.__snapshotLoopStarted) {
-                        window.__snapshotLoopStarted = true;
-                        const sleep = ms => new Promise(r => setTimeout(r, ms));
-                        (async function snapshotLoop() {
-                            while (true) {
-                                await updateSnapshotLoop();
-                                await sleep(1000);
-                            }
-                        })();
-                    }
-                }
+            if (DEBUG) {
+                startDebugMode();
             } else {
-                console.log('[barras_aniversario] IS_SNAPSHOT_LEADER=false — escuchando BroadcastChannel');
+                if (!window.__snapshotLoopStarted) {
+                    window.__snapshotLoopStarted = true;
+                    const sleep = ms => new Promise(r => setTimeout(r, ms));
+                    (async function snapshotLoop() {
+                        while (true) {
+                            await updateSnapshotLoop();
+                            await sleep(1000);
+                        }
+                    })();
+                }
             }
 
             if (!window.__overlayCommandPollingStarted) {
