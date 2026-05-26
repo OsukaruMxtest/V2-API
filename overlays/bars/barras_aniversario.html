@@ -231,7 +231,7 @@
         .health-bar {
             width: 8px;
             height: 30px;
-            background-color: #595959;
+            background-color: #0D1A6B;
             border-radius: 2px;
             overflow: hidden;
             position: relative;
@@ -1243,6 +1243,8 @@
                         mainOverlay.style.opacity = '1';
                     }
                 }
+
+                aplicarVisibilidadArrojables();
             }
 
             function setVisible(visible) {
@@ -1260,6 +1262,7 @@
                         syncDisplayModeUI();
                         applyVisibility();
                         applyColumnVisibility();
+                        aplicarVisibilidadArrojables();
                         scheduleRender();
                     });
                 }
@@ -1317,6 +1320,9 @@
                                 applyColumnVisibility();
                                 if (CURRENT_SNAPSHOT && !renderScheduled) scheduleRender();
                             }
+                            if (upd.category === 'ui' && upd.key === 'showThrowables') {
+                                aplicarVisibilidadArrojables();
+                            }
                         } catch (err) {}
                     }
                 });
@@ -1346,13 +1352,14 @@
                     if (data.timestamp <= lastOverlayCommandTimestamp) return;
 
                     lastOverlayCommandTimestamp = data.timestamp;
-                    const cmd = data.cmd || data.command;
-                    if (cmd) handleOverlayCommand(cmd, data);
+                    if (data && (data.cmd || data.command)) {
+                        handleOverlayCommand(data);
+                    }
                     if (commandChannel?.postMessage) {
-                        const rebroadcastPayload = { type: 'command', cmd, timestamp: data.timestamp };
-                        if (cmd === 'set_display_mode') {
+                        const rebroadcastPayload = { type: 'command', cmd: data.cmd || data.command, timestamp: data.timestamp };
+                        if ((data.cmd === 'set_display_mode' || data.command === 'set_display_mode') && data.mode) {
                             rebroadcastPayload.mode = data.mode === 'individual' ? 'individual' : 'team';
-                            rebroadcastPayload.command = cmd;
+                            rebroadcastPayload.command = data.cmd || data.command;
                         }
                         commandChannel.postMessage(rebroadcastPayload);
                     }
@@ -1364,7 +1371,9 @@
             }
 
             let reloadGuard = false;
-            function handleOverlayCommand(cmd, payload = {}) {
+            function handleOverlayCommand(payload = {}) {
+                const cmd = (typeof payload === 'string') ? payload : (payload.cmd || payload.command || '');
+                if (!cmd) return;
                 switch (cmd) {
                     case 'reset_overlay':
                         if (reloadGuard) return;
@@ -1380,6 +1389,9 @@
                     case 'show_overlay':
                         if (window.OverlayConfig) {
                             window.OverlayConfig.set({ tables: { teamBars: true } });
+                        }
+                        if (currentState === OverlayState.HIDDEN) {
+                            currentState = OverlayState.TABLE;
                         }
                         setVisible(true);
                         break;
@@ -1397,13 +1409,19 @@
                         break;
                     case 'display_mode_individual':
                         window.OverlayConfig?.set({ display: { displayMode: 'individual' } });
+                        applyVisibility();
+                        if (CURRENT_SNAPSHOT && !renderScheduled) scheduleRender();
                         break;
                     case 'display_mode_team':
                         window.OverlayConfig?.set({ display: { displayMode: 'team' } });
+                        applyVisibility();
+                        if (CURRENT_SNAPSHOT && !renderScheduled) scheduleRender();
                         break;
                     case 'set_display_mode':
                         if (payload.mode) {
                             window.OverlayConfig?.set({ display: { displayMode: payload.mode } });
+                            applyVisibility();
+                            if (CURRENT_SNAPSHOT && !renderScheduled) scheduleRender();
                         }
                         break;
                     case 'col_pp_on':
@@ -1425,6 +1443,14 @@
                         window.OverlayConfig?.set({ columns: { showTotal: false } });
                         applyColumnVisibility();
                         if (CURRENT_SNAPSHOT && !renderScheduled) scheduleRender();
+                        break;
+                    case 'ui_throwables_on':
+                        window.OverlayConfig?.set({ ui: { showThrowables: true } });
+                        aplicarVisibilidadArrojables();
+                        break;
+                    case 'ui_throwables_off':
+                        window.OverlayConfig?.set({ ui: { showThrowables: false } });
+                        aplicarVisibilidadArrojables();
                         break;
                     case 'set_scoring': {
                         const scoringPatch = {};
@@ -1873,7 +1899,6 @@
                 const showPP = cfg.columns?.showPP ?? true;
                 const showTotal = cfg.columns?.showTotal ?? true;
 
-                // Toggle visibility of PP and Total columns (cells)
                 const ppCells = document.querySelectorAll('.col-pp');
                 const totalCells = document.querySelectorAll('.col-total');
                 ppCells.forEach(el => {
@@ -1895,8 +1920,7 @@
                     }
                 });
 
-                // Determine ELIM column width based on which of PP/PTS are hidden
-                let elimWidth = '64px'; // default when both visible
+                let elimWidth = '64px';
                 if (!showPP && showTotal) {
                     elimWidth = '72px';
                 } else if (showPP && !showTotal) {
@@ -1905,19 +1929,18 @@
                     elimWidth = '84px';
                 }
 
-                // Build grid template columns only for visible columns in order
                 const columns = [
-                    '38px',   // POS
-                    '42px',   // empty/logo?
-                    '148px',  // EQUIPO / JUGADOR
-                    '64px'    // health bars
+                    '38px',
+                    '42px',
+                    '148px',
+                    '64px'
                 ];
                 if (showPP) {
-                    columns.push('52px'); // PP
+                    columns.push('52px');
                 }
-                columns.push(elimWidth);  // ELIM
+                columns.push(elimWidth);
                 if (showTotal) {
-                    columns.push('72px'); // PTS
+                    columns.push('72px');
                 }
                 const gridVal = columns.join(' ');
 
@@ -1928,7 +1951,6 @@
                     row.style.gridTemplateColumns = gridVal;
                 });
 
-                // Update overlay width
                 const overlay = document.querySelector('.overlay-content');
                 if (overlay) {
                     let totalFixed = 38 + 42 + 148 + 64;
@@ -2413,8 +2435,19 @@
             const contenedores = document.querySelectorAll('.arrojables-container');
             if (!contenedores.length) return;
 
-            const estado = localStorage.getItem("overlay.mostrarArrojables") ?? "true";
-            const mostrar = estado === "true";
+            let mostrar = true;
+            if (window.OverlayConfig) {
+                const cfg = window.OverlayConfig.get();
+                if (cfg?.ui?.showThrowables !== undefined) {
+                    mostrar = !!cfg.ui.showThrowables;
+                } else {
+                    const estado = localStorage.getItem("overlay.mostrarArrojables") ?? "true";
+                    mostrar = estado === "true";
+                }
+            } else {
+                const estado = localStorage.getItem("overlay.mostrarArrojables") ?? "true";
+                mostrar = estado === "true";
+            }
 
             contenedores.forEach(cont => {
                 cont.style.display = mostrar ? "" : "none";
