@@ -274,6 +274,7 @@ color:var(--text-secondary);display:flex;align-items:center;gap:6px
 .btn-purple{background:var(--locked);color:#fff}
 .btn-purple:hover{background:#6d28d9;box-shadow:0 4px 12px rgba(124,58,237,0.3)}
 </style>
+<base target="_blank">
 </head>
 <body>
 
@@ -450,12 +451,97 @@ Copiar Links
 <script>
 /* ============================================
    EVENT PACKAGE BUILDER - app.js (Cliente puro)
+   - Integrado con shared/app_config.js v4.0
    - Eliminada toda lógica de generación local (templates, config, overlays)
    - El ZIP de Event Package se solicita al servidor mediante POST /api/generate-event-package
    - Se mantienen: slots, colores, drag/drop, exportación PNGs, exportación ZIP de logos/INI
    ============================================ */
 const $ = id => document.getElementById(id);
-const API_BASE = '';
+
+/* ============================================
+   CONFIGURACIÓN CENTRALIZADA (app_config.js)
+   ============================================ */
+const HAS_APP_CONFIG = (
+  typeof window !== 'undefined' &&
+  window.APP_CONFIG &&
+  typeof window.APP_CONFIG === 'object'
+);
+
+if (!HAS_APP_CONFIG) {
+  console.error('[EVENT_PACKAGE_BUILDER] window.APP_CONFIG no encontrado. Verifica que shared/app_config.js cargue antes que event_package_builder.html');
+}
+
+const API = HAS_APP_CONFIG ? window.APP_CONFIG : null;
+
+function apiEndpoint(key) {
+  if (!HAS_APP_CONFIG || typeof API.resolveEndpoint !== 'function') {
+    console.error('[EVENT_PACKAGE_BUILDER] resolveEndpoint no disponible:', key);
+    return '';
+  }
+  const endpoint = API.resolveEndpoint(key);
+  if (!endpoint) {
+    console.error('[EVENT_PACKAGE_BUILDER] Endpoint inválido:', key);
+    return '';
+  }
+  return endpoint;
+}
+
+function resolveMedia(path) {
+  if (!path || typeof path !== 'string') return '';
+  if (
+    path.startsWith('blob:') ||
+    path.startsWith('data:') ||
+    path.startsWith('http://') ||
+    path.startsWith('https://')
+  ) {
+    return path;
+  }
+  if (!HAS_APP_CONFIG || typeof API.resolveAsset !== 'function') {
+    return path;
+  }
+  return API.resolveAsset(path, true);
+}
+
+async function safeJsonResponse(res, fallbackMsg) {
+  let json = null;
+  try {
+    json = await res.json();
+  } catch (err) {
+    if (!res.ok) {
+      throw new Error(fallbackMsg);
+    }
+    return {};
+  }
+  if (!res.ok) {
+    throw new Error(
+      json?.error ||
+      json?.message ||
+      fallbackMsg
+    );
+  }
+  return json || {};
+}
+
+async function safeFetch(url, options, fallbackMsg) {
+  if (!url) {
+    if (!HAS_APP_CONFIG) {
+      showToast('APP_CONFIG no disponible. Verifica que shared/app_config.js cargue antes que event_package_builder.html', 'error');
+    }
+    throw new Error('Endpoint inválido');
+  }
+  try {
+    return await fetch(url, options);
+  } catch (err) {
+    console.error(err);
+    const msg = (
+      err?.message?.includes('Failed to fetch') ||
+      err?.message?.includes('NetworkError')
+    )
+      ? 'No se pudo conectar con el servidor. Railway puede estar dormido u offline.'
+      : fallbackMsg;
+    throw new Error(msg);
+  }
+}
 
 /* ============================================
    ESTADO
@@ -517,7 +603,7 @@ function hideLoading() { $('loadingOverlay').classList.remove('active'); }
 function isTeamUsed(teamId) { return slots.some(function(s) { return s && s.id === teamId; }); }
 
 function sanitizeFileName(name) {
-  return (name || '').trim().replace(/[^a-zA-Z0-9_\-]/g, '').slice(0, 64);
+  return (name || '').trim().replace(/[^a-zA-Z0_\-]/g, '').slice(0, 64);
 }
 
 /* ============================================
@@ -597,11 +683,26 @@ function setSlotActiveColor(slotIndex, type) {
    ============================================ */
 async function loadTeams() {
   try {
-    var res = await fetch(API_BASE + '/api/teams');
-    if (!res.ok) throw new Error('Error cargando equipos');
-    var json = await res.json();
+    var res = await safeFetch(apiEndpoint('teams'), {}, 'Error cargando equipos');
+    var json = await safeJsonResponse(res, 'Error cargando equipos');
     if (!json.success) throw new Error(json.error || 'Error');
     allTeams = json.data || [];
+    // Resolve media paths for logos
+    allTeams = allTeams.map(function(t) {
+      return {
+        id: t.id,
+        teamId: t.teamId,
+        teamName: t.teamName,
+        tag: t.tag,
+        logoPng: t.logoPng ? resolveMedia(t.logoPng) : null,
+        logoWebm: t.logoWebm ? resolveMedia(t.logoWebm) : null,
+        flagPng: t.flagPng ? resolveMedia(t.flagPng) : null,
+        flagWebm: t.flagWebm ? resolveMedia(t.flagWebm) : null,
+        primaryColor: t.primaryColor,
+        secondaryColor: t.secondaryColor,
+        createdAt: t.createdAt
+      };
+    });
     filteredTeams = allTeams.slice();
     renderTeamsList();
     renderSlots();
@@ -631,11 +732,11 @@ function renderTeamsList() {
   }
   list.innerHTML = filteredTeams.map(function(t) {
     var hasPng = !!t.logoPng;
-    return '<div class="team-item' + (!hasPng ? ' disabled' : '') + '" draggable="' + hasPng + '" data-id="' + t.id + '" ondragstart="handleDragStart(event,\'' + t.id + '\')" ondragend="handleDragEnd(event)"' + (!hasPng ? '' : ' onclick="addToFirstSlot(\'' + t.id + '\')"') + '>' +
-      '<img class="item-logo" src="' + (t.logoPng || t.logoWebm || '') + '" alt="" onerror="this.style.display=\'none\'">' +
+    return '<div class="team-item' + (!hasPng ? ' disabled' : '') + '" draggable="' + hasPng + '" data-id="' + t.id + '" ondragstart="handleDragStart(event,'' + t.id + '')" ondragend="handleDragEnd(event)"' + (!hasPng ? '' : ' onclick="addToFirstSlot('' + t.id + '')"') + '>' +
+      '<img class="item-logo" src="' + (t.logoPng || t.logoWebm || '') + '" alt="" onerror="this.style.display='none'">' +
       '<div class="item-info"><div class="item-name">' + escapeHtml(t.teamName) + '</div><div class="item-tag">' + escapeHtml(t.teamId) + (t.tag ? ' | ' + escapeHtml(t.tag) : '') + '</div></div>' +
       '<div class="item-colors"><div class="dot" style="background:' + (t.primaryColor || '#3b82f6') + '"></div><div class="dot" style="background:' + (t.secondaryColor || '#64748b') + '"></div></div>' +
-      (hasPng ? '<button class="add-btn" onclick="event.stopPropagation();addToFirstSlot(\'' + t.id + '\')">+</button>' : '') +
+      (hasPng ? '<button class="add-btn" onclick="event.stopPropagation();addToFirstSlot('' + t.id + '')">+</button>' : '') +
       '</div>';
   }).join('');
   updateStats();
@@ -683,12 +784,12 @@ function renderSlots() {
       var primaryRing = activeType === 'primary' ? '0 0 0 3px var(--accent)' : '0 0 0 1px var(--border)';
       var secondaryRing = activeType === 'secondary' ? '0 0 0 3px var(--accent)' : '0 0 0 1px var(--border)';
       slotEl.innerHTML = '<span class="slot-number">' + padSlot(slotNum) + '</span>' +
-        '<img class="slot-logo" src="' + team.logoPng + '" alt="" onerror="this.style.display=\'none\'">' +
+        '<img class="slot-logo" src="' + team.logoPng + '" alt="" onerror="this.style.display='none'">' +
         '<div class="slot-name" style="background:' + activeColor + ';color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.6);">' + escapeHtml(team.teamName) + '</div>' +
         '<div class="slot-tag">' + escapeHtml(generateTag(team)) + '</div>' +
         '<div style="display:flex;gap:6px;justify-content:center;align-items:center;margin-top:1px;">' +
-        '<button title="Usar color primario" style="width:16px;height:16px;border-radius:50%;border:2px solid #fff;box-shadow:' + primaryRing + ';background:' + primaryColor + ';cursor:pointer;transition:transform .15s;" onclick="event.stopPropagation();setSlotActiveColor(' + i + ',\'primary\')" onmouseover="this.style.transform=\'scale(1.25)\'" onmouseout="this.style.transform=\'scale(1)\'"></button>' +
-        '<button title="Usar color secundario" style="width:16px;height:16px;border-radius:50%;border:2px solid #fff;box-shadow:' + secondaryRing + ';background:' + secondaryColor + ';cursor:pointer;transition:transform .15s;" onclick="event.stopPropagation();setSlotActiveColor(' + i + ',\'secondary\')" onmouseover="this.style.transform=\'scale(1.25)\'" onmouseout="this.style.transform=\'scale(1)\'"></button>' +
+        '<button title="Usar color primario" style="width:16px;height:16px;border-radius:50%;border:2px solid #fff;box-shadow:' + primaryRing + ';background:' + primaryColor + ';cursor:pointer;transition:transform .15s;" onclick="event.stopPropagation();setSlotActiveColor(' + i + ','primary')" onmouseover="this.style.transform='scale(1.25)'" onmouseout="this.style.transform='scale(1)'"></button>' +
+        '<button title="Usar color secundario" style="width:16px;height:16px;border-radius:50%;border:2px solid #fff;box-shadow:' + secondaryRing + ';background:' + secondaryColor + ';cursor:pointer;transition:transform .15s;" onclick="event.stopPropagation();setSlotActiveColor(' + i + ','secondary')" onmouseover="this.style.transform='scale(1.25)'" onmouseout="this.style.transform='scale(1)'"></button>' +
         '</div>' +
         '<div class="slot-actions">' +
         '<button class="color-btn" title="Editar colores" onclick="event.stopPropagation();openColorModal(' + i + ')">🎨</button>' +
@@ -866,15 +967,27 @@ function generateINI() {
   for (var i = 0; i < 50; i++) { if (slots[i] !== null) used.push({ team: slots[i], index: i }); }
   if (used.length === 0) { showToast('No hay equipos en los slots', 'error'); return; }
   var today = new Date().toISOString().split('T')[0];
-  var ini = '[/Script/ShadowTrackerExtra.FCustomTeamLogoAndColor]\nEnableTeamLogoAndColor=1\n';
+  var ini = '[/Script/ShadowTrackerExtra.FCustomTeamLogoAndColor]
+EnableTeamLogoAndColor=1
+';
   for (var u = 0; u < used.length; u++) {
     var slotNum = used[u].index + 1, team = used[u].team;
     var pc = getSlotPrimaryColor(used[u].index), rgba = hexToRGBA(pc);
-    ini += 'TeamLogoAndColor=(TeamNo=' + slotNum + ',TeamName=' + team.teamName + ',TeamLogoPath=C:/logo/' + padSlot(slotNum) + '.png,KillInfoPath=C:/logo/' + padSlot(slotNum) + '.png,TeamColorR=' + rgba.r + ',TeamColorG=' + rgba.g + ',TeamColorB=' + rgba.b + ',TeamColorA=255,PlayerColorR=0,PlayerColorG=255,PlayerColorB=0,PlayerColorA=255,CornerMarkPath=,fin)\n';
+    ini += 'TeamLogoAndColor=(TeamNo=' + slotNum + ',TeamName=' + team.teamName + ',TeamLogoPath=C:/logo/' + padSlot(slotNum) + '.png,KillInfoPath=C:/logo/' + padSlot(slotNum) + '.png,TeamColorR=' + rgba.r + ',TeamColorG=' + rgba.g + ',TeamColorB=' + rgba.b + ',TeamColorA=255,PlayerColorR=0,PlayerColorG=255,PlayerColorB=0,PlayerColorA=255,CornerMarkPath=,fin)
+';
   }
-  ini += '\n[/Script/ShadowTrackerExtra.FCustomTeammatePic]\nEnableTeammatePic=1\nTeammatePic=(PlayerName=,PicPath=,fin).\n\n# TAGS:\n';
-  for (var u2 = 0; u2 < used.length; u2++) { ini += '# ' + (used[u2].index + 1) + ': ' + generateTag(used[u2].team) + '\n'; }
-  ini += '\n# Evento: ' + today + '\n';
+  ini += '
+[/Script/ShadowTrackerExtra.FCustomTeammatePic]
+EnableTeammatePic=1
+TeammatePic=(PlayerName=,PicPath=,fin).
+
+# TAGS:
+';
+  for (var u2 = 0; u2 < used.length; u2++) { ini += '# ' + (used[u2].index + 1) + ': ' + generateTag(used[u2].team) + '
+'; }
+  ini += '
+# Evento: ' + today + '
+';
   var blob = new Blob([ini], { type: 'text/plain' });
   var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'TeamLogoAndColor.ini'; a.click();
   URL.revokeObjectURL(a.href);
@@ -924,15 +1037,27 @@ async function exportAllZIP() {
   showLoading('Generando ZIP con ' + used.length + ' equipos...');
   try {
     var zip = new JSZip(), today = new Date().toISOString().split('T')[0];
-    var ini = '[/Script/ShadowTrackerExtra.FCustomTeamLogoAndColor]\nEnableTeamLogoAndColor=1\n';
+    var ini = '[/Script/ShadowTrackerExtra.FCustomTeamLogoAndColor]
+EnableTeamLogoAndColor=1
+';
     for (var u = 0; u < used.length; u++) {
       var slotNum = used[u].index + 1, team = used[u].team;
       var pc = getSlotPrimaryColor(used[u].index), rgba = hexToRGBA(pc);
-      ini += 'TeamLogoAndColor=(TeamNo=' + slotNum + ',TeamName=' + team.teamName + ',TeamLogoPath=C:/logo/' + padSlot(slotNum) + '.png,KillInfoPath=C:/logo/' + padSlot(slotNum) + '.png,TeamColorR=' + rgba.r + ',TeamColorG=' + rgba.g + ',TeamColorB=' + rgba.b + ',TeamColorA=255,PlayerColorR=0,PlayerColorG=255,PlayerColorB=0,PlayerColorA=255,CornerMarkPath=,fin)\n';
+      ini += 'TeamLogoAndColor=(TeamNo=' + slotNum + ',TeamName=' + team.teamName + ',TeamLogoPath=C:/logo/' + padSlot(slotNum) + '.png,KillInfoPath=C:/logo/' + padSlot(slotNum) + '.png,TeamColorR=' + rgba.r + ',TeamColorG=' + rgba.g + ',TeamColorB=' + rgba.b + ',TeamColorA=255,PlayerColorR=0,PlayerColorG=255,PlayerColorB=0,PlayerColorA=255,CornerMarkPath=,fin)
+';
     }
-    ini += '\n[/Script/ShadowTrackerExtra.FCustomTeammatePic]\nEnableTeammatePic=1\nTeammatePic=(PlayerName=,PicPath=,fin).\n\n# TAGS:\n';
-    for (var u2 = 0; u2 < used.length; u2++) { ini += '# ' + (used[u2].index + 1) + ': ' + generateTag(used[u2].team) + '\n'; }
-    ini += '\n# Evento: ' + today + '\n';
+    ini += '
+[/Script/ShadowTrackerExtra.FCustomTeammatePic]
+EnableTeammatePic=1
+TeammatePic=(PlayerName=,PicPath=,fin).
+
+# TAGS:
+';
+    for (var u2 = 0; u2 < used.length; u2++) { ini += '# ' + (used[u2].index + 1) + ': ' + generateTag(used[u2].team) + '
+'; }
+    ini += '
+# Evento: ' + today + '
+';
     zip.file('TeamLogoAndColor.ini', ini);
     for (var u3 = 0; u3 < used.length; u3++) {
       var p = padSlot(used[u3].index + 1), s = used[u3].team.logoPng;
@@ -972,7 +1097,8 @@ function updateEventLinks() {
     '🌐 final:       ' + base + path + '/final_' + name + '.html',
     '🌐 control:     ' + base + path + '/overlay_control.html'
   ];
-  out.innerHTML = lines.map(function(l) { return l.startsWith('🌐') ? '<span class="link-line">' + escapeHtml(l) + '</span>' : escapeHtml(l); }).join('\n');
+  out.innerHTML = lines.map(function(l) { return l.startsWith('🌐') ? '<span class="link-line">' + escapeHtml(l) + '</span>' : escapeHtml(l); }).join('
+');
 }
 function copyEventLinks() {
   var text = $('eventLinksOutput').textContent;
@@ -1021,7 +1147,7 @@ function buildEventPackagePayload() {
   return {
     eventName: getEventName(),
     eventDate: $('evtDate').value || new Date().toISOString().split('T')[0],
-    slots: slotsData.map(function(team, idx) { return { teamId: team.teamId }; }), // slots order
+    slots: slotsData.map(function(team, idx) { return { teamId: team.teamId }; }),
     teams: slotsData
   };
 }
@@ -1042,20 +1168,31 @@ async function generateEventPackage() {
 
   try {
     var payload = buildEventPackagePayload();
-    var response = await fetch(API_BASE + '/api/generate-event-package', {
+    var endpoint = apiEndpoint('genEventPkg');
+    if (!endpoint) {
+      throw new Error('Endpoint inválido o no configurado.');
+    }
+    var response = await safeFetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
-    });
+    }, 'Error generando paquete del evento');
 
     if (!response.ok) {
       var errorText = await response.text();
-      throw new Error(errorText || `Error ${response.status}`);
+      throw new Error(errorText || 'Error ' + response.status);
     }
 
     var blob = await response.blob();
     var today = new Date().toISOString().split('T')[0];
-    saveAs(blob, 'EventPackage_' + name + '_' + today + '.zip');
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'EventPackage_' + name + '_' + today + '.zip';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
     showToast('Event Package "' + name + '" generado correctamente por el servidor', 'success');
     updateEventLinks();
   } catch (err) {
@@ -1071,6 +1208,9 @@ async function generateEventPackage() {
    INICIALIZACION
    ============================================ */
 document.addEventListener('DOMContentLoaded', function() {
+  if (!HAS_APP_CONFIG) {
+    showToast('APP_CONFIG no disponible. Verifica que shared/app_config.js cargue antes que event_package_builder.html', 'error');
+  }
   loadTeams();
 });
 </script>
