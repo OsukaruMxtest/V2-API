@@ -529,6 +529,8 @@ body {
     return API.resolveAsset(path, true);
   }
 
+  const DEFAULT_LOGO = resolveMedia('/logos/default.png');
+
 
   let allPlayers = [];
   let editingId = null;
@@ -588,6 +590,7 @@ body {
   }
 
   async function apiCreatePlayer(body) {
+    if (!HAS_APP_CONFIG) throw new Error('APP_CONFIG no disponible.');
     const res = await fetch(API.resolveEndpoint('players'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -601,6 +604,7 @@ body {
   }
 
   async function apiUpdatePlayer(id, body) {
+    if (!HAS_APP_CONFIG) throw new Error('APP_CONFIG no disponible.');
     const res = await fetch(API.resolveEndpoint('players') + '/' + id, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -614,6 +618,7 @@ body {
   }
 
   async function apiDeletePlayer(id) {
+    if (!HAS_APP_CONFIG) throw new Error('APP_CONFIG no disponible.');
     const res = await fetch(API.resolveEndpoint('players') + '/' + id, { method: 'DELETE' });
     if(!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -623,6 +628,7 @@ body {
   }
 
   async function apiUploadPlayer(file, uid) {
+    if (!HAS_APP_CONFIG) throw new Error('APP_CONFIG no disponible.');
     const form = new FormData();
     form.append('uid', uid);
     form.append('entityType', 'player');
@@ -649,6 +655,7 @@ body {
   }
 
   async function apiBatchImport(players) {
+    if (!HAS_APP_CONFIG) throw new Error('APP_CONFIG no disponible.');
     const res = await fetch(API.resolveEndpoint('playersBatch'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -695,14 +702,14 @@ body {
       card.className = 'player-card';
       card.dataset.id = p.id;
 
-      var logoSrc = p.logo ? resolveMedia(p.logo) : resolveMedia('/logos/default.png');
+      var logoSrc = p.logo ? resolveMedia(p.logo) : DEFAULT_LOGO;
       var logoType = p.logoType || getLogoType(p.logo);
       var mediaHtml = '';
 
       if(logoType === 'webm'){
         mediaHtml = '<video src="' + escapeHtml(logoSrc) + '" muted loop preload="metadata" playsinline onmouseenter="this.play()" onmouseleave="this.pause();this.currentTime=0;"></video>';
       }else{
-        mediaHtml = '<img src="' + escapeHtml(logoSrc) + '" loading="lazy" onerror="this.src=\'/logos/default.png\'">';
+        mediaHtml = '<img src="' + escapeHtml(logoSrc) + '" loading="lazy" onerror="this.src=\'' + escapeHtml(DEFAULT_LOGO) + '\'">';
       }
 
       var flagHtml = '';
@@ -867,7 +874,7 @@ body {
     $('nationality').value = p.nationality || '';
 
     currentLogo = p.logo || null;
-    if(p.logo) showPreview(p.logo, p.logoType || getLogoType(p.logo));
+    if(p.logo) showPreview(resolveMedia(p.logo), p.logoType || getLogoType(p.logo));
   }
 
   function closeModal() {
@@ -896,7 +903,7 @@ body {
     if(type === 'webm') {
       box.innerHTML = '<video src="' + escapeHtml(dataUrl) + '" muted loop playsinline preload="metadata" style="max-width:100%;max-height:100%;object-fit:contain;"></video>';
     } else {
-      box.innerHTML = '<img src="' + escapeHtml(dataUrl) + '" alt="" onerror="this.src=\'' + escapeHtml(resolveMedia('/logos/default.png')) + '\'" style="max-width:100%;max-height:100%;object-fit:contain;">';
+      box.innerHTML = '<img src="' + escapeHtml(dataUrl) + '" alt="" onerror="this.src=\'' + escapeHtml(DEFAULT_LOGO) + '\'" style="max-width:100%;max-height:100%;object-fit:contain;">';
     }
     setupVideoHover(box);
   }
@@ -904,6 +911,7 @@ body {
   function initDragDrop() {
     var zone = $('dropZoneLogo');
     var fileInput = $('fileInputLogo');
+    if(!zone || !fileInput) return;
 
     ['dragenter','dragover','dragleave','drop'].forEach(function(evt) {
       zone.addEventListener(evt, preventDefaults, false);
@@ -1021,13 +1029,13 @@ body {
     var overlay = $('duplicateOverlay');
     var container = $('duplicatePlayerContent');
 
-    var dupLogo = existing.logo ? resolveMedia(existing.logo) : resolveMedia('/logos/default.png');
+    var dupLogo = existing.logo ? resolveMedia(existing.logo) : DEFAULT_LOGO;
     var dupLogoType = existing.logoType || getLogoType(existing.logo);
     var media = '';
     if(dupLogoType === 'webm') {
       media = '<div class="dup-media"><video src="' + escapeHtml(dupLogo) + '" muted loop playsinline preload="metadata" style="width:100%;height:100%;object-fit:cover;"></video></div>';
     } else {
-      media = '<div class="dup-media"><img src="' + escapeHtml(dupLogo) + '" alt="" onerror="this.src=\'/logos/default.png\'" style="width:100%;height:100%;object-fit:cover;"></div>';
+      media = '<div class="dup-media"><img src="' + escapeHtml(dupLogo) + '" alt="" onerror="this.src=\'' + escapeHtml(DEFAULT_LOGO) + '\'" style="width:100%;height:100%;object-fit:cover;"></div>';
     }
 
     var dupFlag = '';
