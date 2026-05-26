@@ -325,10 +325,11 @@ body {
 <base target="_blank">
 <base target="_blank">
 <base target="_blank">
+<base target="_blank">
 </head>
 <body>
 
-<header class="header">
+<<header class="header">
   <h1>PLAYER MANAGER</h1>
   <p>Base de datos de jugadores competitivos / esports</p>
 </header>
@@ -515,7 +516,7 @@ body {
 
 <div class="toast-container" id="toastContainer"></div>
 
-
+<script src="../shared/app_config.js"></script>
 <script>
 (function(){
   'use strict';
@@ -546,8 +547,8 @@ body {
 
   function escapeHtml(str) {
     if(typeof str !== 'string') return '';
-    return str.replace(/[&<>"']/g, function(m){
-      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m];
+    return str.replace(/[&<<>"']/g, function(m){
+      return ({'&':'&amp;','<<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m];
     });
   }
 
