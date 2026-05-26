@@ -822,7 +822,7 @@
 <body>
 
 <!-- HEADER -->
-<<header class="header">
+<header class="header">
   <h1>TEAM MANAGER</h1>
   <p>Base de datos de equipos, logos y banderas</p>
 </header>
@@ -1011,52 +1011,31 @@
 <!-- TOAST CONTAINER -->
 <div class="toast-container" id="toastContainer"></div>
 
+<script src="../shared/app_config.js"></script>
 <script src="app.js"></script>
 
-<!-- ======================================================
-     OPTIMIZACIÓN CPU/GPU WEBM – Hover Play / No Autoplay
-     ====================================================== -->
 <script>
+/* WEBM Hover Play / No Autoplay — CPU/GPU optimization */
 (function(){
   'use strict';
 
   function setupVideoHover(video){
     if(!video || video.dataset.hoverPlay === '1') return;
     video.dataset.hoverPlay = '1';
-
-    // 1. Eliminar autoplay absoluto (atributo y propiedad)
     video.autoplay = false;
     video.removeAttribute('autoplay');
-
-    // 2. Preload liviano: metadata carga solo metadatos + primer frame.
-    //    Esto mantiene el diseño visual intacto (no se ve negro) sin consumir
-    //    recursos de decodificación continua.
     if(!video.hasAttribute('preload') || video.getAttribute('preload') === 'auto'){
       video.preload = 'metadata';
     }
-
-    // 3. Estado inicial: detenido y al inicio
     video.pause();
     try{ video.currentTime = 0; }catch(e){}
-
-    // 4. El área de hover es el contenedor padre (mejor UX) o el video mismo
     var hoverTarget = video.closest('.card-logo-wrap, .card-flag-wrap, .preview-box, .team-card') || video;
-
     var onEnter = function(){
-      // Si por alguna razón sigue en 'none', forzar metadata antes de reproducir
-      if(video.preload === 'none'){
-        video.preload = 'metadata';
-        video.load();
-      }
+      if(video.preload === 'none'){ video.preload = 'metadata'; video.load(); }
       var p = video.play();
       if(p && typeof p.catch === 'function') p.catch(function(){});
     };
-
-    var onLeave = function(){
-      video.pause();
-      try{ video.currentTime = 0; }catch(e){}
-    };
-
+    var onLeave = function(){ video.pause(); try{ video.currentTime = 0; }catch(e){} };
     hoverTarget.addEventListener('mouseenter', onEnter);
     hoverTarget.addEventListener('mouseleave', onLeave);
   }
@@ -1067,28 +1046,20 @@
     videos.forEach(setupVideoHover);
   }
 
-  // Aplicar a videos ya presentes en el DOM (previews, etc.)
   scanVideos(document);
 
-  // MutationObserver: captura videos inyectados dinámicamente por renderTeams(),
-  // drag & drop, modal previews, importación de JSON, etc.
   var observer = new MutationObserver(function(mutations){
     mutations.forEach(function(mutation){
       mutation.addedNodes.forEach(function(node){
         if(node.nodeType === 1){
-          if(node.tagName === 'VIDEO'){
-            setupVideoHover(node);
-          }else if(typeof node.querySelectorAll === 'function'){
-            node.querySelectorAll('video').forEach(setupVideoHover);
-          }
+          if(node.tagName === 'VIDEO'){ setupVideoHover(node); }
+          else if(typeof node.querySelectorAll === 'function'){ node.querySelectorAll('video').forEach(setupVideoHover); }
         }
       });
     });
   });
 
   observer.observe(document.body, { childList: true, subtree: true });
-
-  // API global para re-aplicar manualmente tras innerHTML masivo si fuera necesario
   window.optimizeVideoHover = function(){ scanVideos(document); };
 })();
 </script>

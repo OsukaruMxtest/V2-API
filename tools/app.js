@@ -4,7 +4,108 @@
    ============================================ */
 
 const $ = id => document.getElementById(id);
-const API_BASE = '';
+
+/* ============================================
+   CONFIGURACIÓN CENTRALIZADA (app_config.js)
+   ============================================ */
+const HAS_APP_CONFIG = (
+  typeof window !== 'undefined' &&
+  window.APP_CONFIG &&
+  typeof window.APP_CONFIG === 'object'
+);
+
+if (!HAS_APP_CONFIG) {
+  console.error('[TEAM_MANAGER] window.APP_CONFIG no encontrado. Verifica que shared/app_config.js cargue antes que tools/app.js');
+}
+
+const API = HAS_APP_CONFIG ? window.APP_CONFIG : {
+  API_BASE: '',
+  resolveApi: function(path){ return path || ''; },
+  resolveEndpoint: function(){ return ''; },
+  resolveAsset: function(path){ return path || ''; }
+};
+
+function apiEndpoint(key) {
+  if (!HAS_APP_CONFIG || typeof API.resolveEndpoint !== 'function') {
+    console.error('[TEAM_MANAGER] resolveEndpoint no disponible:', key);
+    return '';
+  }
+
+  const endpoint = API.resolveEndpoint(key);
+
+  if (!endpoint) {
+    console.error('[TEAM_MANAGER] Endpoint inválido:', key);
+    return '';
+  }
+
+  return endpoint;
+}
+
+function resolveMedia(path) {
+  if (!path || typeof path !== 'string') return '';
+
+  if (
+    path.startsWith('blob:') ||
+    path.startsWith('data:') ||
+    path.startsWith('http://') ||
+    path.startsWith('https://')
+  ) {
+    return path;
+  }
+
+  if (!HAS_APP_CONFIG || typeof API.resolveAsset !== 'function') {
+    return path;
+  }
+
+  return API.resolveAsset(path, true);
+}
+
+async function safeJsonResponse(res, fallbackMsg = 'Error inesperado') {
+  let json = null;
+
+  try {
+    json = await res.json();
+  } catch (err) {
+    if (!res.ok) {
+      throw new Error(fallbackMsg);
+    }
+    return {};
+  }
+
+  if (!res.ok) {
+    throw new Error(
+      json?.error ||
+      json?.message ||
+      fallbackMsg
+    );
+  }
+
+  return json || {};
+}
+
+async function safeFetch(url, options = {}, fallbackMsg = 'Error de conexión') {
+  if (!url) {
+    if (!HAS_APP_CONFIG) {
+      showConfigError();
+    }
+    throw new Error('Endpoint inválido');
+  }
+
+  try {
+    return await fetch(url, options);
+  } catch (err) {
+    console.error(err);
+
+    const msg = (
+      err?.message?.includes('Failed to fetch') ||
+      err?.message?.includes('NetworkError')
+    )
+      ? 'No se pudo conectar con el servidor. Railway puede estar dormido u offline.'
+      : fallbackMsg;
+
+    throw new Error(msg);
+  }
+}
 
 /* ============================================
    ESTADO GLOBAL
@@ -28,6 +129,8 @@ let confirmCallback = null;
    ============================================ */
 function showToast(msg, type = 'success') {
   const container = $('toastContainer');
+  if (!container) return;
+
   const toast = document.createElement('div');
   toast.className = `toast ${type}`;
 
@@ -39,78 +142,121 @@ function showToast(msg, type = 'success') {
 
   toast.innerHTML = `${icons[type] || icons.warning}<span>${msg}</span>`;
   container.appendChild(toast);
+
   setTimeout(() => toast.remove(), 3000);
+}
+
+function showConfigError() {
+  showToast('APP_CONFIG no disponible. Verifica que shared/app_config.js cargue antes que tools/app.js', 'error');
 }
 
 function escapeHtml(text) {
   const div = document.createElement('div');
-  div.textContent = text;
+  div.textContent = text == null ? '' : String(text);
   return div.innerHTML;
 }
 
 function formatDate(iso) {
   if (!iso) return '-';
+
   const d = new Date(iso);
-  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+
+  if (Number.isNaN(d.getTime())) return '-';
+
+  return d.toLocaleDateString('es-ES', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  });
 }
 
 function rgbToHex(r, g, b) {
-  return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('').toUpperCase();
+  return '#' + [r, g, b]
+    .map(x => x.toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase();
 }
 
 /* ============================================
    API - FETCH HELPERS
    ============================================ */
 async function apiGetTeams() {
-  const res = await fetch(`${API_BASE}/api/teams`);
-  if (!res.ok) throw new Error('Error cargando equipos');
-  const json = await res.json();
-  if (!json.success) throw new Error(json.error || 'Error cargando equipos');
-  return json.data;
+  const res = await safeFetch(
+    apiEndpoint('teams'),
+    {},
+    'Error cargando equipos'
+  );
+
+  const json = await safeJsonResponse(
+    res,
+    'Error cargando equipos'
+  );
+
+  if (!json.success) {
+    throw new Error(json.error || 'Error cargando equipos');
+  }
+
+  return json.data || [];
 }
 
 async function apiCreateTeam(body) {
-  const res = await fetch(`${API_BASE}/api/teams`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Error creando equipo');
-  }
-  return res.json();
+  const res = await safeFetch(
+    apiEndpoint('teams'),
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    },
+    'Error creando equipo'
+  );
+
+  return await safeJsonResponse(
+    res,
+    'Error creando equipo'
+  );
 }
 
 async function apiUpdateTeam(id, body) {
-  const res = await fetch(`${API_BASE}/api/teams/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Error actualizando equipo');
-  }
-  return res.json();
+  const res = await safeFetch(
+    apiEndpoint('teams') + '/' + id,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    },
+    'Error actualizando equipo'
+  );
+
+  return await safeJsonResponse(
+    res,
+    'Error actualizando equipo'
+  );
 }
 
 async function apiDeleteTeam(id) {
-  const res = await fetch(`${API_BASE}/api/teams/${id}`, { method: 'DELETE' });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Error eliminando equipo');
-  }
-  return res.json();
+  const res = await safeFetch(
+    apiEndpoint('teams') + '/' + id,
+    { method: 'DELETE' },
+    'Error eliminando equipo'
+  );
+
+  return await safeJsonResponse(
+    res,
+    'Error eliminando equipo'
+  );
 }
 
 async function apiClearAll() {
-  const res = await fetch(`${API_BASE}/api/teams`, { method: 'DELETE' });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Error limpiando base de datos');
-  }
-  return res.json();
+  const res = await safeFetch(
+    apiEndpoint('teams'),
+    { method: 'DELETE' },
+    'Error limpiando base de datos'
+  );
+
+  return await safeJsonResponse(
+    res,
+    'Error limpiando base de datos'
+  );
 }
 
 /* ============================================
@@ -118,38 +264,65 @@ async function apiClearAll() {
    ============================================ */
 async function apiUploadAsset(file, teamId, assetType = 'logo') {
   const form = new FormData();
+
   form.append('teamId', teamId);
   form.append('assetType', assetType);
   form.append('logo', file);
-  const res = await fetch(`${API_BASE}/api/upload-logo`, {
-    method: 'POST',
-    body: form
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Error subiendo archivo');
-  }
-  const json = await res.json();
+
+  const res = await safeFetch(
+    apiEndpoint('uploadLogo'),
+    {
+      method: 'POST',
+      body: form
+    },
+    'Error subiendo archivo'
+  );
+
+  const json = await safeJsonResponse(
+    res,
+    'Error subiendo archivo'
+  );
+
   return json.data || json;
 }
 
 async function apiExport() {
-  const res = await fetch(`${API_BASE}/api/export`);
-  if (!res.ok) throw new Error('Error exportando');
-  return res.blob();
+  const res = await safeFetch(
+    apiEndpoint('exportTeams'),
+    {},
+    'Error exportando'
+  );
+
+  if (!res.ok) {
+    let msg = 'Error exportando';
+
+    try {
+      const text = await res.text();
+      const json = text ? JSON.parse(text) : null;
+      msg = json?.error || json?.message || msg;
+    } catch (err) {}
+
+    throw new Error(msg);
+  }
+
+  return await res.blob();
 }
 
 async function apiImport(data) {
-  const res = await fetch(`${API_BASE}/api/import`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Error importando');
-  }
-  return res.json();
+  const res = await safeFetch(
+    apiEndpoint('importTeams'),
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    },
+    'Error importando'
+  );
+
+  return await safeJsonResponse(
+    res,
+    'Error importando'
+  );
 }
 
 /* ============================================
@@ -160,6 +333,7 @@ async function loadAllTeams() {
     allTeams = await apiGetTeams();
     renderTeams();
   } catch (err) {
+    console.error(err);
     showToast(err.message, 'error');
   }
 }
@@ -169,7 +343,12 @@ async function loadAllTeams() {
    ============================================ */
 function renderTeams() {
   const grid = $('teamsGrid');
-  const query = $('searchInput').value.trim().toLowerCase();
+  const searchInput = $('searchInput');
+
+  if (!grid || !searchInput) return;
+
+  const query = searchInput.value.trim().toLowerCase();
+
   let teams = [...allTeams];
 
   if (query) {
@@ -203,23 +382,33 @@ function emptyStateHTML(query) {
 }
 
 function buildCardHTML(t) {
+  const logoPng = resolveMedia(t.logoPng);
+  const logoWebm = resolveMedia(t.logoWebm);
+  const flagPng = resolveMedia(t.flagPng);
+  const flagWebm = resolveMedia(t.flagWebm);
+
   let logoHtml = '';
-  if (t.logoPng) {
-    logoHtml += `<img src="${t.logoPng}" alt="${escapeHtml(t.teamName)} PNG" style="max-width:50%;">`;
+
+  if (logoPng) {
+    logoHtml += `<img src="${logoPng}" alt="${escapeHtml(t.teamName)} PNG" style="max-width:50%;">`;
   }
-  if (t.logoWebm) {
-    logoHtml += `<video src="${t.logoWebm}" autoplay muted loop playsinline style="max-width:50%;"></video>`;
+
+  if (logoWebm) {
+    logoHtml += `<video src="${logoWebm}" autoplay muted loop playsinline style="max-width:50%;"></video>`;
   }
+
   if (!logoHtml) {
     logoHtml = `<div class="card-logo-placeholder">?</div>`;
   }
 
   let flagHtml = '';
-  if (t.flagPng) {
-    flagHtml += `<img src="${t.flagPng}" alt="Bandera ${escapeHtml(t.teamName)} PNG" style="max-width:50%;">`;
+
+  if (flagPng) {
+    flagHtml += `<img src="${flagPng}" alt="Bandera ${escapeHtml(t.teamName)} PNG" style="max-width:50%;">`;
   }
-  if (t.flagWebm) {
-    flagHtml += `<video src="${t.flagWebm}" autoplay muted loop playsinline style="max-width:50%;"></video>`;
+
+  if (flagWebm) {
+    flagHtml += `<video src="${flagWebm}" autoplay muted loop playsinline style="max-width:50%;"></video>`;
   }
 
   return `
@@ -261,9 +450,18 @@ function buildCardHTML(t) {
    MODAL & FORMULARIO
    ============================================ */
 function openModal(id = null) {
+  const modalTitle = $('modalTitle');
+  const modalOverlay = $('modalOverlay');
+
+  if (!modalTitle || !modalOverlay) {
+    console.error('[TEAM_MANAGER] No se encontró modalTitle o modalOverlay.');
+    return;
+  }
+
   editingId = id || null;
-  $('modalTitle').textContent = id ? 'Editar Equipo' : 'Agregar Equipo';
-  $('modalOverlay').classList.add('active');
+
+  modalTitle.textContent = id ? 'Editar Equipo' : 'Agregar Equipo';
+  modalOverlay.classList.add('active');
   document.body.style.overflow = 'hidden';
 
   if (!id) {
@@ -286,7 +484,11 @@ function resetFormNew() {
 
 function fillFormEdit(id) {
   const t = allTeams.find(x => x.id === id);
-  if (!t) { closeModal(); return; }
+
+  if (!t) {
+    closeModal();
+    return;
+  }
 
   $('teamId').value = t.teamId;
   $('teamName').value = t.teamName;
@@ -301,14 +503,21 @@ function fillFormEdit(id) {
   currentFlagPng = t.flagPng || null;
   currentFlagWebm = t.flagWebm || null;
 
-  if (t.logoPng) showPreview(t.logoPng, 'png', '');
-  if (t.logoWebm) showPreview(t.logoWebm, 'webm', '');
-  if (t.flagPng) showPreview(t.flagPng, 'png', 'Flag');
-  if (t.flagWebm) showPreview(t.flagWebm, 'webm', 'Flag');
+  if (t.logoPng) showPreview(resolveMedia(t.logoPng), 'png', '');
+  if (t.logoWebm) showPreview(resolveMedia(t.logoWebm), 'webm', '');
+  if (t.flagPng) showPreview(resolveMedia(t.flagPng), 'png', 'Flag');
+  if (t.flagWebm) showPreview(resolveMedia(t.flagWebm), 'webm', 'Flag');
 }
 
 function closeModal() {
-  $('modalOverlay').classList.remove('active');
+  const modalOverlay = $('modalOverlay');
+
+  if (!modalOverlay) {
+    console.error('[TEAM_MANAGER] No se encontró modalOverlay.');
+    return;
+  }
+
+  modalOverlay.classList.remove('active');
   document.body.style.overflow = '';
   editingId = null;
   resetFiles();
@@ -319,38 +528,46 @@ function closeModalOnBackdrop(e) {
 }
 
 function resetFiles() {
-  // Logos
   currentLogoPng = null;
   currentLogoWebm = null;
   pendingPngFile = null;
   pendingWebmFile = null;
-  const pngInput = $('fileInputPng');
-  const webmInput = $('fileInputWebm');
-  if (pngInput) pngInput.value = '';
-  if (webmInput) webmInput.value = '';
 
-  // Flags
   currentFlagPng = null;
   currentFlagWebm = null;
   pendingFlagPngFile = null;
   pendingFlagWebmFile = null;
+
+  const pngInput = $('fileInputPng');
+  const webmInput = $('fileInputWebm');
   const flagPngInput = $('fileInputFlagPng');
   const flagWebmInput = $('fileInputFlagWebm');
+
+  if (pngInput) pngInput.value = '';
+  if (webmInput) webmInput.value = '';
   if (flagPngInput) flagPngInput.value = '';
   if (flagWebmInput) flagWebmInput.value = '';
 
-  // Previews logos
-  $('previewArea').classList.remove('active');
-  $('previewBox').innerHTML = '';
-  $('eyedropperSection').classList.remove('active');
-  eyedropperImage = null;
-  const cvs = $('eyedropperCanvas');
-  const ctx = cvs.getContext('2d');
-  ctx.clearRect(0, 0, cvs.width, cvs.height);
+  const previewArea = $('previewArea');
+  const previewBox = $('previewBox');
+  const eyedropperSection = $('eyedropperSection');
 
-  // Previews flags
+  if (previewArea) previewArea.classList.remove('active');
+  if (previewBox) previewBox.innerHTML = '';
+  if (eyedropperSection) eyedropperSection.classList.remove('active');
+
+  eyedropperImage = null;
+
+  const cvs = $('eyedropperCanvas');
+
+  if (cvs) {
+    const ctx = cvs.getContext('2d');
+    ctx.clearRect(0, 0, cvs.width, cvs.height);
+  }
+
   const previewAreaFlag = $('previewAreaFlag');
   const previewBoxFlag = $('previewBoxFlag');
+
   if (previewAreaFlag) previewAreaFlag.classList.remove('active');
   if (previewBoxFlag) previewBoxFlag.innerHTML = '';
 }
@@ -359,16 +576,29 @@ function resetFiles() {
    COLOR INPUT SYNC
    ============================================ */
 function syncHexFromPicker(which) {
-  const hex = $(which + 'Color').value.toUpperCase();
-  $(which + 'Hex').value = hex;
+  const color = $(which + 'Color');
+  const hexInput = $(which + 'Hex');
+
+  if (!color || !hexInput) return;
+
+  const hex = color.value.toUpperCase();
+
+  hexInput.value = hex;
   updateDot(which, hex);
 }
 
 function syncPickerFromHex(which) {
-  let hex = $(which + 'Hex').value;
+  const color = $(which + 'Color');
+  const hexInput = $(which + 'Hex');
+
+  if (!color || !hexInput) return;
+
+  let hex = hexInput.value;
+
   if (!hex.startsWith('#')) hex = '#' + hex;
+
   if (/^#[0-9A-F]{6}$/i.test(hex)) {
-    $(which + 'Color').value = hex;
+    color.value = hex;
     updateDot(which, hex);
   }
 }
@@ -376,6 +606,7 @@ function syncPickerFromHex(which) {
 function updateDot(which, hex) {
   const dotId = which === 'primary' ? 'dotPrimary' : 'dotSecondary';
   const dot = $(dotId);
+
   if (dot) dot.style.background = hex;
 }
 
@@ -392,6 +623,8 @@ function initDragDrop() {
 function initDropZone(zoneId, inputId) {
   const dropZone = $(zoneId);
   const fileInput = $(inputId);
+
+  if (!dropZone || !fileInput) return;
 
   ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => {
     dropZone.addEventListener(evt, preventDefaults, false);
@@ -425,6 +658,7 @@ function handleFileSelect(e) {
 
 function processFile(file, inputId) {
   if (!file) return;
+
   const isPng = file.type === 'image/png';
   const isWebm = file.type === 'video/webm';
 
@@ -437,6 +671,7 @@ function processFile(file, inputId) {
     showToast('PNG excede 5MB.', 'error');
     return;
   }
+
   if (isWebm && file.size > 20 * 1024 * 1024) {
     showToast('WEBM excede 20MB.', 'error');
     return;
@@ -472,22 +707,30 @@ function showPreview(dataUrl, type, prefix = '') {
   const area = $('previewArea' + prefix);
   const box = $('previewBox' + prefix);
   const label = $('previewLabel' + prefix);
+
+  if (!area || !box || !label) return;
+
   area.classList.add('active');
   box.innerHTML = '';
 
+  const mediaUrl = resolveMedia(dataUrl);
+
   if (type === 'png') {
     const img = document.createElement('img');
-    img.src = dataUrl;
+    img.src = mediaUrl;
+
     if (!prefix) img.onload = () => setupEyedropper(img);
+
     box.appendChild(img);
     label.innerHTML = prefix ? flagPngPreviewLabel() : pngPreviewLabel();
   } else {
     const vid = document.createElement('video');
-    vid.src = dataUrl;
+    vid.src = mediaUrl;
     vid.autoplay = true;
     vid.muted = true;
     vid.loop = true;
     vid.playsInline = true;
+
     box.appendChild(vid);
     label.innerHTML = prefix ? flagWebmPreviewLabel() : webmPreviewLabel();
   }
@@ -528,15 +771,20 @@ function setupEyedropper(img) {
   const section = $('eyedropperSection');
   const canvas = $('eyedropperCanvas');
   const wrap = $('canvasWrap');
+
+  if (!section || !canvas || !wrap || !img || !img.naturalWidth) return;
+
   section.classList.add('active');
   eyedropperImage = img;
 
   const maxWidth = wrap.clientWidth;
   const scale = maxWidth / img.naturalWidth;
+
   canvas.width = maxWidth;
   canvas.height = img.naturalHeight * scale;
 
   const ctx = canvas.getContext('2d');
+
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
   canvas.onclick = e => {
@@ -562,8 +810,12 @@ function setupEyedropper(img) {
 
 function setEyedropperMode(mode) {
   eyedropperMode = mode;
-  $('modePrimary').classList.toggle('active', mode === 'primary');
-  $('modeSecondary').classList.toggle('active', mode === 'secondary');
+
+  const modePrimary = $('modePrimary');
+  const modeSecondary = $('modeSecondary');
+
+  if (modePrimary) modePrimary.classList.toggle('active', mode === 'primary');
+  if (modeSecondary) modeSecondary.classList.toggle('active', mode === 'secondary');
 }
 
 function autoExtractColors() {
@@ -571,10 +823,13 @@ function autoExtractColors() {
 
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
+
   const w = 100;
   const h = (eyedropperImage.naturalHeight / eyedropperImage.naturalWidth) * w;
+
   canvas.width = w;
   canvas.height = h;
+
   ctx.drawImage(eyedropperImage, 0, 0, w, h);
 
   const data = ctx.getImageData(0, 0, w, h).data;
@@ -584,13 +839,16 @@ function autoExtractColors() {
     const r = data[i] & 0xF0;
     const g = data[i + 1] & 0xF0;
     const b = data[i + 2] & 0xF0;
+
     if (r < 15 && g < 15 && b < 15) continue;
     if (r > 240 && g > 240 && b > 240) continue;
+
     const key = `${r},${g},${b}`;
     map.set(key, (map.get(key) || 0) + 1);
   }
 
   const sorted = [...map.entries()].sort((a, b) => b[1] - a[1]);
+
   if (sorted.length < 2) {
     showToast('No se detectaron colores suficientes.', 'warning');
     return;
@@ -630,6 +888,7 @@ async function saveTeam() {
   try {
     if (editingId) {
       const existing = allTeams.find(t => t.id === editingId);
+
       let logoPngPath = currentLogoPng;
       let logoWebmPath = currentLogoWebm;
       let flagPngPath = currentFlagPng;
@@ -640,16 +899,19 @@ async function saveTeam() {
         logoPngPath = uploadRes.logo;
         pendingPngFile = null;
       }
+
       if (pendingWebmFile && existing) {
         const uploadRes = await apiUploadAsset(pendingWebmFile, existing.teamId, 'logo');
         logoWebmPath = uploadRes.logo;
         pendingWebmFile = null;
       }
+
       if (pendingFlagPngFile && existing) {
         const uploadRes = await apiUploadAsset(pendingFlagPngFile, existing.teamId, 'flag');
         flagPngPath = uploadRes.logo;
         pendingFlagPngFile = null;
       }
+
       if (pendingFlagWebmFile && existing) {
         const uploadRes = await apiUploadAsset(pendingFlagWebmFile, existing.teamId, 'flag');
         flagWebmPath = uploadRes.logo;
@@ -668,6 +930,7 @@ async function saveTeam() {
       };
 
       await apiUpdateTeam(editingId, body);
+
       showToast('Equipo actualizado.', 'success');
       await loadAllTeams();
       closeModal();
@@ -685,6 +948,7 @@ async function saveTeam() {
 
       const created = await apiCreateTeam(body);
       const newTeam = created.data || created;
+
       $('teamId').value = newTeam.teamId;
 
       if (pendingPngFile && newTeam.teamId) {
@@ -692,16 +956,19 @@ async function saveTeam() {
         await apiUpdateTeam(newTeam.id, { logoPng: uploadRes.logo });
         pendingPngFile = null;
       }
+
       if (pendingWebmFile && newTeam.teamId) {
         const uploadRes = await apiUploadAsset(pendingWebmFile, newTeam.teamId, 'logo');
         await apiUpdateTeam(newTeam.id, { logoWebm: uploadRes.logo });
         pendingWebmFile = null;
       }
+
       if (pendingFlagPngFile && newTeam.teamId) {
         const uploadRes = await apiUploadAsset(pendingFlagPngFile, newTeam.teamId, 'flag');
         await apiUpdateTeam(newTeam.id, { flagPng: uploadRes.logo });
         pendingFlagPngFile = null;
       }
+
       if (pendingFlagWebmFile && newTeam.teamId) {
         const uploadRes = await apiUploadAsset(pendingFlagWebmFile, newTeam.teamId, 'flag');
         await apiUpdateTeam(newTeam.id, { flagWebm: uploadRes.logo });
@@ -713,6 +980,7 @@ async function saveTeam() {
       closeModal();
     }
   } catch (err) {
+    console.error(err);
     showToast(err.message, 'error');
   }
 }
@@ -723,7 +991,9 @@ function editTeam(id) {
 
 function deleteTeam(id) {
   const t = allTeams.find(x => x.id === id);
+
   if (!t) return;
+
   openConfirm(
     '¿Eliminar equipo?',
     `Se eliminará permanentemente a <strong>${escapeHtml(t.teamName)}</strong>.`,
@@ -733,6 +1003,7 @@ function deleteTeam(id) {
         await loadAllTeams();
         showToast('Equipo eliminado.', 'success');
       } catch (err) {
+        console.error(err);
         showToast(err.message, 'error');
       }
     }
@@ -747,27 +1018,44 @@ async function exportJSON() {
     const blob = await apiExport();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
+
     a.href = url;
     a.download = 'equipos.json';
     a.click();
+
     URL.revokeObjectURL(url);
+
     showToast('JSON exportado.', 'success');
   } catch (err) {
+    console.error(err);
     showToast(err.message, 'error');
   }
 }
 
 async function importJSON(input) {
   const file = input.files[0];
+
   if (!file) return;
 
   const reader = new FileReader();
+
   reader.onload = async ev => {
     try {
       const data = JSON.parse(ev.target.result);
-      if (!Array.isArray(data)) throw new Error('Formato inválido');
-      const valid = data.every(d => d && typeof d.teamId === 'string' && typeof d.teamName === 'string');
-      if (!valid) throw new Error('Estructura inválida');
+
+      if (!Array.isArray(data)) {
+        throw new Error('Formato inválido');
+      }
+
+      const valid = data.every(d =>
+        d &&
+        typeof d.teamId === 'string' &&
+        typeof d.teamName === 'string'
+      );
+
+      if (!valid) {
+        throw new Error('Estructura inválida');
+      }
 
       openConfirm(
         'Importar JSON',
@@ -778,14 +1066,17 @@ async function importJSON(input) {
             await loadAllTeams();
             showToast('Base de datos importada.', 'success');
           } catch (err) {
+            console.error(err);
             showToast(err.message, 'error');
           }
         }
       );
     } catch (err) {
+      console.error(err);
       showToast('Error al importar: ' + err.message, 'error');
     }
   };
+
   reader.readAsText(file);
   input.value = '';
 }
@@ -800,6 +1091,7 @@ function confirmClearDB() {
         await loadAllTeams();
         showToast('Base de datos limpiada.', 'success');
       } catch (err) {
+        console.error(err);
         showToast(err.message, 'error');
       }
     }
@@ -810,19 +1102,40 @@ function confirmClearDB() {
    CONFIRM DIALOG
    ============================================ */
 function openConfirm(title, message, onYes) {
+  const confirmTitle = $('confirmTitle');
+  const confirmMessage = $('confirmMessage');
+  const confirmOverlay = $('confirmOverlay');
+
+  if (!confirmTitle || !confirmMessage || !confirmOverlay) {
+    console.error('[TEAM_MANAGER] No se encontró confirmTitle, confirmMessage o confirmOverlay.');
+    return;
+  }
+
   confirmCallback = onYes;
-  $('confirmTitle').textContent = title;
-  $('confirmMessage').innerHTML = message;
-  $('confirmOverlay').classList.add('active');
+
+  confirmTitle.textContent = title;
+  confirmMessage.innerHTML = message;
+  confirmOverlay.classList.add('active');
 }
 
 function closeConfirm() {
-  $('confirmOverlay').classList.remove('active');
+  const confirmOverlay = $('confirmOverlay');
+
+  if (!confirmOverlay) {
+    console.error('[TEAM_MANAGER] No se encontró confirmOverlay.');
+    return;
+  }
+
+  confirmOverlay.classList.remove('active');
   confirmCallback = null;
 }
 
 function initConfirmDialog() {
-  $('confirmBtnYes').onclick = () => {
+  const confirmBtnYes = $('confirmBtnYes');
+
+  if (!confirmBtnYes) return;
+
+  confirmBtnYes.onclick = () => {
     if (confirmCallback) confirmCallback();
     closeConfirm();
   };
@@ -832,6 +1145,10 @@ function initConfirmDialog() {
    INICIALIZACIÓN
    ============================================ */
 document.addEventListener('DOMContentLoaded', () => {
+  if (!HAS_APP_CONFIG) {
+    showConfigError();
+  }
+
   initDragDrop();
   initConfirmDialog();
   loadAllTeams();
