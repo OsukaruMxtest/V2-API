@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tabla Final - Torneo Aniversario</title>
+    <script src="../overlay_event_bus.js"></script>
+    <script src="../overlay_config.js"></script>
+    <script src="../overlay_bridge.js"></script>
+    <script src="../overlay_sync.js"></script>
+    <script src="../js/overlay_broadcast.js"></script>
+    <style>
+        :root {
+            --bg: #05053a;
+            --lav: #e2d7ef;
+            --accent-2: #bc5efb;
+            --accent-green: #04f88c;
+            --danger-color: #2c2fd8;
+            --background-color: rgba(4, 4, 68, 0.7);
+            --text-color: var(--lav);
+            --header-bg-color: rgba(4, 4, 68, 0.7);
+            --header-text-color: var(--lav);
+            --shadow-color: rgba(4, 4, 68, 0.5);
+            --font-family: 'Roboto', Arial, sans-serif;
+
+            --classification-table-top: 55%;
+            --classification-table-left: 50%;
+            --classification-table-width: 1800px;
+            --classification-font-size: 25px;
+            --classification-logo-size: 33px;
+            --classification-winner-icon-size: 40px;
+
+            --bonus-icon-size: 20px;
+            --bonus-text-size: 0.6em;
+        }
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            width: 1920px;
+            height: 1080px;
+            font-family: var(--font-family);
+            background-color: transparent;
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #alertsContainer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 1920px;
+            height: 1080px;
+            z-index: 2000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.8s ease-in-out, visibility 0.8s ease-in-out;
+        }
+        #alertsContainer.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        #alertsVideo {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 1920px;
+            height: 1080px;
+            object-fit: cover;
+            z-index: 1;
+        }
+
+        .alert-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 1920px;
+            height: 1080px;
+            z-index: 2;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.8s ease-in-out;
+        }
+        .alert-layer.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .alert-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 1920px;
+            height: 1080px;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            z-index: 1;
+        }
+        #classificationLayer .alert-bg { background-image: url('images/classification_bg.png'); }
+
+        .layer-content {
+            position: relative;
+            z-index: 2;
+            width: 100%;
+            height: 100%;
+        }
+
+        #classificationTableContainer {
+            position: absolute;
+            top: var(--classification-table-top);
+            left: var(--classification-table-left);
+            transform: translate(-50%, -50%);
+            width: var(--classification-table-width);
+            max-width: 95vw;
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+        }
+
+        .classification-subtable {
+            width: 48%;
+            border-collapse: collapse;
+            font-size: var(--classification-font-size);
+            font-weight: bold;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 8px;
+            padding: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            color: var(--lav);
+            text-shadow: 0 0 4px rgba(0,0,0,0.8);
+        }
+
+        .classification-subtable th,
+        .classification-subtable td {
+            padding: 6px 8px;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.15);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: var(--lav);
+        }
+
+        .classification-subtable td img {
+            display: block;
+            margin: 0 auto;
+            height: var(--classification-logo-size);
+            width: auto;
+            max-width: 100%;
+            border-radius: 3px;
+        }
+
+        .classification-subtable td .winner-icon {
+            height: var(--classification-winner-icon-size);
+            width: auto;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+
+        .team-cell {
+            text-align: center;
+            line-height: 1.2;
+        }
+        .team-name {
+            font-weight: bold;
+            margin-bottom: 2px;
+        }
+        .team-bonus {
+            margin-top: 4px;
+        }
+        .bonus-item {
+            display: inline-flex;
+            align-items: center;
+            margin-right: 8px;
+        }
+        .bonus-item img {
+            height: var(--bonus-icon-size);
+            width: auto;
+            vertical-align: middle;
+        }
+        .bonus-item span {
+            margin-left: 4px;
+            font-size: var(--bonus-text-size);
+            color: #ffd966;
+        }
+
+
+    </style>
+</head>
+<body>
+    <div id="alertsContainer">
+        <video id="alertsVideo" autoplay muted loop playsinline>
+            <source src="images/background.mp4" type="video/mp4">
+        </video>
+
+        <div id="classificationLayer" class="alert-layer">
+            <div class="alert-bg"></div>
+            <div class="layer-content">
+                <div id="classificationTableContainer">
+                    <table class="classification-subtable">
+                        <thead>
+                            <tr>
+                                <th>POS</th>
+                                <th></th> 
+                                <th>EQUIPO</th>
+                                <th>PP</th>
+                                <th>PE</th>
+                                <th>TOTAL</th>
+                            </tr>
+                        </thead>
+                        <tbody id="classificationBody1"></tbody>
+                    </table>
+                    <table class="classification-subtable">
+                        <thead>
+                            <tr>
+                                <th>POS</th>
+                                <th></th> 
+                                <th>EQUIPO</th>
+                                <th>PP</th>
+                                <th>PE</th>
+                                <th>TOTAL</th>
+                            </tr>
+                        </thead>
+                        <tbody id="classificationBody2"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        window.IS_SNAPSHOT_LEADER = false;
+
+
+        function getPositionPoints(rank) {
+            const pointsTable = { 1: 10, 2: 6, 3: 5, 4: 4, 5: 3, 6: 2, 7: 1, 8: 1 };
+            return pointsTable[rank] || 0;
+        }
+
+        function findHeader(headers, possibleNames) {
+            for (let name of possibleNames) {
+                const index = headers.indexOf(name);
+                if (index !== -1) return index;
+            }
+            return -1; 
+        }
+
+
+        const LOGO_BASE = '../assets/logos/';
+        const _webmCache = new Map(); 
+
+        async function hasWebm(padded) {
+            if (_webmCache.has(padded)) return _webmCache.get(padded);
+            try {
+                const r = await fetch(LOGO_BASE + padded + '.webm', { method: 'HEAD' });
+                _webmCache.set(padded, r.ok);
+                return r.ok;
+            } catch { _webmCache.set(padded, false); return false; }
+        }
+
+        async function setTeamLogo(element, teamId) {
+            const padded = String(teamId || 0).padStart(3, '0');
+            const useWebm = await hasWebm(padded);
+            const parent = element.parentElement;
+            if (!parent) return;
+            if (useWebm) {
+                if (element.tagName === 'VIDEO') {
+                    const src = element.querySelector('source');
+                    if (src) { src.src = LOGO_BASE + padded + '.webm'; element.load(); }
+                } else {
+                    const v = document.createElement('video');
+                    v.className = element.className;
+                    v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true;
+                    const s = document.createElement('source');
+                    s.src = LOGO_BASE + padded + '.webm'; s.type = 'video/webm';
+                    v.appendChild(s);
+                    v.onerror = () => { const fb = document.createElement('img'); fb.className = v.className; fb.src = LOGO_BASE + 'default.png'; v.replaceWith(fb); };
+                    parent.replaceChild(v, element);
+                }
+            } else {
+                if (element.tagName === 'IMG') {
+                    element.src = LOGO_BASE + padded + '.png';
+                    element.onerror = () => { element.src = LOGO_BASE + 'default.png'; };
+                } else {
+                    const img = document.createElement('img');
+                    img.className = element.className;
+                    img.src = LOGO_BASE + padded + '.png';
+                    img.onerror = () => { img.src = LOGO_BASE + 'default.png'; };
+                    parent.replaceChild(img, element);
+                }
+            }
+        }
+
+        function teamLogoHTML(teamId, cssClass, styleAttr) {
+            const padded = String(teamId || 0).padStart(3, '0');
+            const cls   = cssClass  ? ` class="${cssClass}"`  : '';
+            const style = styleAttr ? ` style="${styleAttr}"` : '';
+            if (_webmCache.get(padded) === true) {
+                return `<video${cls}${style} autoplay loop muted playsinline><source src="${LOGO_BASE}${padded}.webm" type="video/webm"></video>`;
+            }
+            if (!_webmCache.has(padded)) hasWebm(padded);
+            return `<img${cls}${style} src="${LOGO_BASE}${padded}.png" onerror="this.src='${LOGO_BASE}default.png'">`;
+        }
+
+        function formatTeamID(id) {
+            return String(id).padStart(3, '0');
+        }
+
+        async function loadTournamentCSV() {
+            const teamMap = new Map(); 
+            let matchIndex = 1;
+            while (true) {
+                const url = `partidas/aniv_M${matchIndex}.csv`;
+                try {
+                    const response = await fetch(url, { cache: 'no-cache' });
+                    if (response.status === 404) break; 
+                    if (!response.ok) {
+                        console.warn(`Error loading ${url}: ${response.status}`);
+                        break;
+                    }
+                    const csvText = await response.text();
+                    const lines = csvText.split('\n').filter(l => l.trim() !== '');
+                    if (lines.length < 2) {
+                        matchIndex++;
+                        continue;
+                    }
+
+                    const headers = lines[0].split(',').map(h => h.trim());
+
+                    const idxJugador = findHeader(headers, ["Nombre del Jugador", "Jugador"]);
+                    const idxEquipo = findHeader(headers, ["Nombre del Equipo", "Equipo"]);
+                    const idxTeamID = findHeader(headers, ["TeamID"]); // NUEVO
+                    const idxRank = findHeader(headers, ["Rango", "Posición", "Rank"]);
+                    const idxKills = findHeader(headers, ["Número de Bajas", "Bajas", "Kills"]);
+                    const idxDistance = findHeader(headers, ["Distancia Recorrida"]);
+                    const idxGrenades = findHeader(headers, ["Bajas con Granada"]);
+                    const idxVehicle = findHeader(headers, ["Bajas en Vehículo"]);
+                    const idxKillDist = findHeader(headers, ["Máxima Distancia de Baja"]);
+                    const idxMolotov = findHeader(headers, [
+                        "Eliminaciones Molotov"
+                    ]);
+
+                    if (idxJugador === -1 || idxEquipo === -1 || idxTeamID === -1 || idxRank === -1 || idxKills === -1 ||
+                        idxDistance === -1 || idxGrenades === -1 || idxVehicle === -1 || idxKillDist === -1) {
+                        console.warn(`Faltan columnas esenciales en ${url}. Las encontradas:`, headers);
+                        break;
+                    }
+
+                    const rows = lines.slice(1);
+
+                    const matchTeams = new Map(); 
+
+                    let maxDistance = { value: -1, teamName: null };
+                    let maxKillDistance = { value: -1, teamName: null };
+
+                    for (const row of rows) {
+                        const cols = row.split(',').map(c => c.trim());
+                        if (cols.length <= Math.max(idxJugador, idxEquipo, idxTeamID, idxRank, idxKills, idxDistance, idxGrenades, idxVehicle, idxKillDist, idxMolotov)) continue;
+
+                        const jugador = cols[idxJugador];
+                        const equipo = cols[idxEquipo];
+                        const teamID = parseInt(cols[idxTeamID]) || 0;
+                        const rank = parseInt(cols[idxRank]) || 999;
+                        const kills = parseInt(cols[idxKills]) || 0;
+                        const distance = parseFloat(cols[idxDistance]) || 0;
+                        const grenades = parseInt(cols[idxGrenades]) || 0;
+                        const vehicle = parseInt(cols[idxVehicle]) || 0;
+                        const killDist = parseFloat(cols[idxKillDist]) || 0;
+                        const molotov = idxMolotov !== -1 ? (parseInt(cols[idxMolotov]) || 0) : 0;
+
+                        const teamName = equipo || 'Desconocido';
+
+                        const explosiveBonus = (grenades + molotov) * 3; 
+                        const vehicleBonus = vehicle * 8;
+                        const playerBonus = explosiveBonus + vehicleBonus;
+
+                        if (!matchTeams.has(teamName)) {
+                            matchTeams.set(teamName, {
+                                teamName,
+                                teamID,
+                                kills: 0,
+                                bonus: 0,
+                                rank: rank, 
+                                vehicleKills: 0,
+                                grenadeKills: 0,
+                                molotovKills: 0,
+                                distanceBonus: false,  
+                                killDistanceBonus: false 
+                            });
+                        }
+                        const team = matchTeams.get(teamName);
+                        team.kills += kills;
+                        team.bonus += playerBonus;
+                        team.vehicleKills += vehicle;
+                        team.grenadeKills += grenades;
+                        team.molotovKills += molotov;
+
+                        if (distance > maxDistance.value) {
+                            maxDistance = { value: distance, teamName };
+                        }
+                        if (killDist > maxKillDistance.value) {
+                            maxKillDistance = { value: killDist, teamName };
+                        }
+                    }
+
+                    if (maxDistance.teamName && matchTeams.has(maxDistance.teamName)) {
+                        matchTeams.get(maxDistance.teamName).bonus += 15; 
+                        matchTeams.get(maxDistance.teamName).distanceBonus = true;
+                    }
+                    if (maxKillDistance.teamName && matchTeams.has(maxKillDistance.teamName)) {
+                        matchTeams.get(maxKillDistance.teamName).bonus += 18; 
+                        matchTeams.get(maxKillDistance.teamName).killDistanceBonus = true;
+                    }
+
+                    for (const [teamName, matchTeam] of matchTeams) {
+                        if (!teamMap.has(teamName)) {
+                            teamMap.set(teamName, {
+                                teamName,
+                                teamID: matchTeam.teamID,
+                                totalPP: 0,
+                                totalPE: 0,
+                                totalBonus: 0,
+                                wwcdCount: 0,
+                                vehicleKillsTotal: 0,
+                                grenadeKillsTotal: 0,
+                                molotovKillsTotal: 0,
+                                distanceBonusCount: 0,
+                                killDistanceBonusCount: 0
+                            });
+                        }
+                        const globalTeam = teamMap.get(teamName);
+                        const pp = getPositionPoints(matchTeam.rank);
+                        const pe = matchTeam.kills;
+                        const bonus = matchTeam.bonus;
+
+                        globalTeam.totalPP += pp;
+                        globalTeam.totalPE += pe;
+                        globalTeam.totalBonus += bonus;
+                        if (matchTeam.rank === 1) globalTeam.wwcdCount += 1;
+
+                        globalTeam.vehicleKillsTotal += matchTeam.vehicleKills;
+                        globalTeam.grenadeKillsTotal += matchTeam.grenadeKills;
+                        globalTeam.molotovKillsTotal += matchTeam.molotovKills;
+                        if (matchTeam.distanceBonus) globalTeam.distanceBonusCount += 1;
+                        if (matchTeam.killDistanceBonus) globalTeam.killDistanceBonusCount += 1;
+                    }
+
+                    matchIndex++;
+                } catch (error) {
+                    console.warn(`Error fetching/parsing ${url}:`, error);
+                    break; 
+                }
+            }
+
+            const teams = Array.from(teamMap.values()).map(t => ({
+                ...t,
+                totalPoints: t.totalPP + t.totalPE + t.totalBonus
+            }));
+
+            teams.sort((a, b) => {
+                if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
+                if (b.wwcdCount !== a.wwcdCount) return b.wwcdCount - a.wwcdCount;
+                if (b.totalPP !== a.totalPP) return b.totalPP - a.totalPP;
+                return b.totalPE - a.totalPE;
+            });
+
+            return teams;
+        }
+
+        async function populateClassification() {
+            const teams = await loadTournamentCSV();
+            if (!teams.length) {
+                document.getElementById('classificationBody1').innerHTML = '<tr><td colspan="6">No hay datos de torneo</td></tr>'; 
+                document.getElementById('classificationBody2').innerHTML = '';
+                return;
+            }
+
+            const topTeams = teams.slice(0, 16);
+            const group1 = topTeams.slice(0, 8);
+            const group2 = topTeams.slice(8, 16);
+
+            function renderRow(team, pos) {
+                const logoID = formatTeamID(team.teamID);
+                let bonusHtml = '<div class="team-bonus">';
+
+                if (team.wwcdCount > 0) {
+                    bonusHtml += `<div class="bonus-item"><img src="images/wwcd.png" alt="winner" title="WWCD"><span>x${team.wwcdCount}</span></div>`;
+                }
+                if (team.vehicleKillsTotal > 0) {
+                    bonusHtml += `<div class="bonus-item"><img src="images/car.png" alt="vehículo" title="Bajas vehículo"><span>x${team.vehicleKillsTotal}</span></div>`;
+                }
+                if (team.grenadeKillsTotal > 0) {
+                    bonusHtml += `<div class="bonus-item"><img src="images/nade.png" alt="granada" title="Bajas con granada"><span>x${team.grenadeKillsTotal}</span></div>`;
+                }
+                if (team.molotovKillsTotal > 0) {
+                    bonusHtml += `<div class="bonus-item"><img src="images/molotov.png" alt="molotov" title="Bajas con Molotov"><span>x${team.molotovKillsTotal}</span></div>`;
+                }
+                if (team.distanceBonusCount > 0) {
+                    bonusHtml += `<div class="bonus-item"><img src="images/run.png" alt="mayor distancia" title="Mayor distancia recorrida"><span>x${team.distanceBonusCount}</span></div>`;
+                }
+                if (team.killDistanceBonusCount > 0) {
+                    bonusHtml += `<div class="bonus-item"><img src="images/snipe.png" alt="snipe" title="Eliminación más lejana"><span>x${team.killDistanceBonusCount}</span></div>`;
+                }
+
+                bonusHtml += '</div>';
+
+                return `<td>${pos}</td>
+                        <td>${teamLogoHTML(team.teamID, '', 'height: var(--classification-logo-size)')}</td>
+                        <td class="team-cell">
+                            <div class="team-name">${team.teamName}</div>
+                            ${bonusHtml}
+                        </td>
+                        <td>${team.totalPP}</td>
+                        <td>${team.totalPE}</td>
+                        <td>${team.totalPoints}</td>`;
+            }
+
+            const tbody1 = document.getElementById('classificationBody1');
+            tbody1.innerHTML = '';
+            group1.forEach((team, idx) => {
+                const row = document.createElement('tr');
+                row.innerHTML = renderRow(team, idx + 1);
+                tbody1.appendChild(row);
+            });
+
+            const tbody2 = document.getElementById('classificationBody2');
+            tbody2.innerHTML = '';
+            group2.forEach((team, idx) => {
+                const row = document.createElement('tr');
+                row.innerHTML = renderRow(team, idx + 9);
+                tbody2.appendChild(row);
+            });
+        }
+
+        let tableVisible = false;
+
+        window.showFinalTable = async function() {
+            if (tableVisible) return;
+            tableVisible = true;
+
+            await populateClassification();
+            document.getElementById('alertsContainer').classList.add('active');
+            document.getElementById('classificationLayer').classList.add('active');
+        };
+
+        window.hideFinalTable = function() {
+            tableVisible = false;
+            document.getElementById('alertsContainer').classList.remove('active');
+            document.getElementById('classificationLayer').classList.remove('active');
+        };
+
+
+
+        const ALLOWED_COMMANDS = new Set([
+            'showTablaGeneral', 'hideAll',
+            'pause_tabla_general', 'resume_tabla_general'
+        ]);
+
+        function handleCommand(command) {
+            if (!ALLOWED_COMMANDS.has(command)) return;
+
+            switch (command) {
+                case 'showTablaGeneral':
+                    showFinalTable();
+                    break;
+                case 'hideAll':
+                    hideFinalTable();
+                    break;
+                case 'pause_tabla_general':
+                case 'resume_tabla_general':
+                    console.log('[tabla_general]', command);
+                    break;
+            }
+        }
+
+        window.addEventListener('storage', function(e) {
+            if (e.key === 'overlay_manual_cmd' && e.newValue) {
+                try {
+                    const payload = JSON.parse(e.newValue);
+                    if (payload && payload.command) {
+                        handleCommand(payload.command);
+                    }
+                } catch (err) {
+                    console.error('[tabla_final_aniversario] Error parsing storage command', err);
+                }
+            }
+        });
+
+        if (window.OverlayBus) {
+            OverlayBus.on('showTablaGeneral', function() { handleCommand('showTablaGeneral'); });
+            OverlayBus.on('hideAll',          function() { handleCommand('hideAll'); });
+            console.log('[tabla_final_aniversario] Escuchando OverlayBus');
+        }
+
+        let commandChannel = null;
+        try {
+            commandChannel = new BroadcastChannel('pubgm_commands');
+        } catch (e) {
+            console.warn('[tabla_final_aniversario] BroadcastChannel no disponible');
+        }
+
+        if (commandChannel) {
+            commandChannel.onmessage = (event) => {
+                const data = event.data;
+                const cmd = data?.cmd || data?.command;
+                if (!cmd) return;
+                handleCommand(cmd);
+            };
+        }
+
+        if (window.OverlaySync) {
+            console.log('[tabla_final_aniversario] OverlaySync disponible');
+        }
+
+        window.addEventListener('beforeunload', () => {
+            if (commandChannel) {
+                commandChannel.close();
+            }
+        });
+
+        window.addEventListener('load', function() {
+            hideFinalTable();
+        });
+
+        (function startRailwayCommandPolling() {
+            const RAILWAY_CMD_URL = 'https://pubgm-aggregator-production.up.railway.app/overlaycommand';
+            let _lastCmdTs = 0;
+
+            setInterval(async () => {
+                try {
+                    const res = await fetch(RAILWAY_CMD_URL, { cache: 'no-cache', signal: AbortSignal.timeout(1500) });
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    if (!data || !data.timestamp || data.timestamp <= _lastCmdTs) return;
+                    _lastCmdTs = data.timestamp;
+                    const cmd = data.cmd || data.command;
+                    if (cmd) handleCommand(cmd);
+                } catch (e) { /* ignorar errores de red */ }
+            }, 500);
+        })();
+    </script>
+</body>
+</html>

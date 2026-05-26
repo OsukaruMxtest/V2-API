@@ -1,0 +1,1276 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PLAYER MANAGER - Esports Database</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg-primary: #0f1115;
+  --bg-secondary: #1a1d24;
+  --bg-card: #21252e;
+  --bg-hover: #2a2f3a;
+  --border: #2f3542;
+  --text-primary: #e8ecf1;
+  --text-secondary: #9aa3b2;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --danger: #ef4444;
+  --danger-hover: #dc2626;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 4px 20px rgba(0,0,0,0.35);
+  --shadow-lg: 0 10px 40px rgba(0,0,0,0.5);
+  --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+
+.header {
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 32px 24px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.header::before {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(circle at 50% 0%, rgba(59,130,246,0.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+.header h1 {
+  font-size: 2.2rem; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;
+  background: linear-gradient(90deg, #fff 0%, #94a3b8 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  position: relative; z-index: 1;
+}
+.header p { color: var(--text-secondary); font-size: 0.95rem; margin-top: 6px; position: relative; z-index: 1; }
+
+.container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+.top-panel {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+  margin-bottom: 28px; padding: 18px 20px;
+  background: var(--bg-secondary); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+}
+
+.btn-group { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 10px 18px; border: none; border-radius: var(--radius-sm);
+  font-size: 0.9rem; font-weight: 600; cursor: pointer;
+  transition: var(--transition); color: #fff; background: var(--accent);
+  position: relative; overflow: hidden;
+}
+.btn:hover { background: var(--accent-hover); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(59,130,246,0.25); }
+.btn:active { transform: translateY(0); }
+
+.btn-secondary { background: var(--bg-hover); color: var(--text-primary); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--border); box-shadow: none; }
+
+.btn-danger { background: var(--danger); }
+.btn-danger:hover { background: var(--danger-hover); box-shadow: 0 4px 12px rgba(239,68,68,0.25); }
+
+.btn-success { background: var(--success); }
+.btn-success:hover { background: #16a34a; box-shadow: 0 4px 12px rgba(34,197,94,0.25); }
+
+.search-box { position: relative; min-width: 260px; flex: 1; max-width: 400px; }
+.search-box input {
+  width: 100%; padding: 10px 14px 10px 38px;
+  background: var(--bg-primary); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text-primary);
+  font-size: 0.9rem; transition: var(--transition);
+}
+.search-box input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+.search-box svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); width: 16px; height: 16px; }
+
+.players-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 20px;
+}
+
+.player-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px;
+  transition: var(--transition); position: relative; overflow: hidden;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.player-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--text-secondary));
+  opacity: 0.8;
+}
+.player-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); border-color: var(--bg-hover); }
+
+.card-media {
+  width: 100%; aspect-ratio: 1/1;
+  background: var(--bg-secondary); border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden; position: relative;
+}
+.card-media img, .card-media video {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+.card-media .media-placeholder {
+  font-size: 3rem; color: var(--border);
+}
+
+.card-body { display: flex; flex-direction: column; gap: 6px; }
+
+.nickname {
+  font-size: 1.25rem; font-weight: 800; color: var(--text-primary);
+  word-break: break-word; letter-spacing: 0.3px;
+}
+
+.card-meta {
+  font-size: 0.8rem; color: var(--text-secondary);
+  display: flex; flex-direction: column; gap: 3px;
+}
+.card-meta .uid { font-family: monospace; opacity: 0.9; }
+.card-meta .discord { display: flex; align-items: center; gap: 4px; }
+
+.card-flag {
+  position: absolute; top: 14px; right: 14px;
+  width: 32px; height: 24px; border-radius: 4px;
+  overflow: hidden; border: 1px solid var(--border);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  background: var(--bg-primary);
+}
+.card-flag img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.card-actions {
+  display: flex; gap: 8px; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border);
+}
+.card-actions .btn { flex: 1; justify-content: center; padding: 8px 12px; font-size: 0.8rem; }
+
+.empty-state {
+  grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: var(--text-secondary);
+}
+.empty-state svg { width: 64px; height: 64px; margin-bottom: 16px; opacity: 0.3; }
+
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7); backdrop-filter: blur(6px);
+  display: none; align-items: center; justify-content: center;
+  z-index: 1000; padding: 20px; opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.modal-overlay.active { display: flex; opacity: 1; }
+
+.modal {
+  background: var(--bg-secondary); border: 1px solid var(--border);
+  border-radius: var(--radius); width: 100%; max-width: 640px;
+  max-height: 92vh; overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+  transform: translateY(20px) scale(0.98);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.modal-overlay.active .modal { transform: translateY(0) scale(1); }
+
+.modal-header {
+  padding: 20px 24px; border-bottom: 1px solid var(--border);
+  display: flex; justify-content: space-between; align-items: center;
+  position: sticky; top: 0; background: var(--bg-secondary); z-index: 10;
+}
+.modal-header h2 { font-size: 1.25rem; font-weight: 700; }
+.modal-close {
+  background: none; border: none; color: var(--text-secondary); cursor: pointer;
+  width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; transition: var(--transition);
+}
+.modal-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+.modal-body { padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-group label {
+  font-size: 0.85rem; font-weight: 600; color: var(--text-secondary);
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.form-group input[type="text"],
+.form-group select {
+  padding: 10px 14px; background: var(--bg-primary); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text-primary); font-size: 0.95rem;
+  transition: var(--transition); width: 100%;
+}
+.form-group input:focus, .form-group select:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+}
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+.drop-zone {
+  border: 2px dashed var(--border); border-radius: var(--radius);
+  padding: 28px 24px; text-align: center; transition: var(--transition);
+  cursor: pointer; position: relative; background: var(--bg-primary);
+}
+.drop-zone:hover { border-color: var(--accent); background: rgba(59,130,246,0.04); }
+.drop-zone.dragover { border-color: var(--accent); background: rgba(59,130,246,0.08); transform: scale(1.01); }
+.drop-zone svg { width: 40px; height: 40px; color: var(--text-secondary); margin-bottom: 8px; transition: var(--transition); }
+.drop-zone:hover svg, .drop-zone.dragover svg { color: var(--accent); }
+.drop-zone p { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 4px; }
+.drop-zone .hint { font-size: 0.75rem; color: var(--text-secondary); opacity: 0.7; }
+.drop-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+
+.preview-area { display: none; flex-direction: column; gap: 10px; }
+.preview-area.active { display: flex; }
+.preview-box {
+  width: 100%; aspect-ratio: 1/1; background: #000; border-radius: var(--radius-sm);
+  overflow: hidden; display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); position: relative;
+}
+.preview-box img, .preview-box video { max-width: 100%; max-height: 100%; object-fit: contain; }
+.preview-label { font-size: 0.8rem; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+.preview-actions { display: flex; gap: 8px; }
+.preview-actions .btn { padding: 6px 12px; font-size: 0.75rem; }
+
+.duplicate-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7); backdrop-filter: blur(6px);
+  display: none; align-items: center; justify-content: center;
+  z-index: 1050; padding: 20px; opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.duplicate-overlay.active { display: flex; opacity: 1; }
+.duplicate-box {
+  background: var(--bg-secondary); border: 1px solid var(--border);
+  border-radius: var(--radius); width: 100%; max-width: 420px;
+  box-shadow: var(--shadow-lg); text-align: center; padding: 28px;
+}
+.duplicate-box h3 { margin-bottom: 8px; font-size: 1.2rem; color: var(--danger); }
+.duplicate-box > p { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 18px; }
+.duplicate-player {
+  display: flex; align-items: center; gap: 14px;
+  background: var(--bg-primary); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 14px; margin-bottom: 18px; text-align: left;
+}
+.duplicate-player .dup-media {
+  width: 56px; height: 56px; border-radius: var(--radius-sm); overflow: hidden;
+  background: var(--bg-secondary); flex-shrink: 0; border: 1px solid var(--border);
+}
+.duplicate-player .dup-media img, .duplicate-player .dup-media video { width: 100%; height: 100%; object-fit: cover; }
+.duplicate-player .dup-info { display: flex; flex-direction: column; gap: 3px; }
+.duplicate-player .dup-info strong { color: var(--text-primary); font-size: 0.95rem; }
+.duplicate-player .dup-info span { color: var(--text-secondary); font-size: 0.8rem; }
+
+.confirm-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+  display: none; align-items: center; justify-content: center;
+  z-index: 1100; padding: 20px;
+}
+.confirm-overlay.active { display: flex; }
+.confirm-box {
+  background: var(--bg-secondary); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 28px; max-width: 400px; width: 100%;
+  text-align: center; box-shadow: var(--shadow-lg);
+}
+.confirm-box h3 { margin-bottom: 10px; font-size: 1.2rem; }
+.confirm-box p { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px; }
+.confirm-actions { display: flex; gap: 10px; justify-content: center; }
+
+.toast-container {
+  position: fixed; top: 20px; right: 20px; z-index: 2000;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.toast {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-left: 4px solid var(--accent); border-radius: var(--radius-sm);
+  padding: 14px 18px; color: var(--text-primary); font-size: 0.9rem;
+  box-shadow: var(--shadow-lg);
+  animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s forwards;
+  max-width: 320px; display: flex; align-items: center; gap: 10px;
+}
+.toast.success { border-left-color: var(--success); }
+.toast.error { border-left-color: var(--danger); }
+.toast.warning { border-left-color: var(--warning); }
+
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes fadeOut { to { opacity: 0; transform: translateX(20px); } }
+
+@media (max-width: 640px) {
+  .header h1 { font-size: 1.5rem; }
+  .top-panel { flex-direction: column; align-items: stretch; }
+  .search-box { max-width: none; }
+  .form-row { grid-template-columns: 1fr; }
+  .players-grid { grid-template-columns: 1fr; }
+  .btn-group { justify-content: stretch; }
+  .btn-group .btn { flex: 1; justify-content: center; }
+}
+@media (max-width: 400px) {
+  .container { padding: 14px; }
+  .modal-body { padding: 16px; }
+}
+</style>
+<base target="_blank">
+<base target="_blank">
+<base target="_blank">
+</head>
+<body>
+
+<header class="header">
+  <h1>PLAYER MANAGER</h1>
+  <p>Base de datos de jugadores competitivos / esports</p>
+</header>
+
+<div class="container">
+  <div class="top-panel">
+    <div class="btn-group">
+      <button class="btn" id="btnAddPlayer">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        Agregar Jugador
+      </button>
+      <button class="btn btn-secondary" id="btnExport">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        Exportar JSON
+      </button>
+      <button class="btn btn-secondary" id="btnImportTrigger">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+        Importar JSON
+      </button>
+      <input type="file" id="importFile" accept=".json" style="display:none">
+      <button class="btn btn-secondary" id="btnImportCSVTrigger">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+        Importar CSV
+      </button>
+      <input type="file" id="importCSVFile" accept=".csv" style="display:none">
+      <button class="btn btn-danger" id="btnClearDB">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        Limpiar Base de Datos
+      </button>
+    </div>
+
+    <div class="search-box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      <input type="text" id="searchInput" placeholder="Buscar por nickname, UID, nombre o Discord...">
+    </div>
+  </div>
+
+  <div class="players-grid" id="playersGrid"></div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modalTitle">Agregar Jugador</h2>
+      <button class="modal-close" id="modalClose" aria-label="Cerrar">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <form id="playerForm">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="uid">UID *</label>
+            <input type="text" id="uid" required placeholder="Ej: 5123456789" maxlength="32">
+          </div>
+          <div class="form-group">
+            <label for="nickname">Nickname *</label>
+            <input type="text" id="nickname" required placeholder="Ej: PlayerX" maxlength="100">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="nombre">Nombre real</label>
+            <input type="text" id="nombre" placeholder="Ej: Juan Perez" maxlength="100">
+          </div>
+          <div class="form-group">
+            <label for="discordId">Discord ID</label>
+            <input type="text" id="discordId" placeholder="Ej: playerx#1234" maxlength="64">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="nationality">Nacionalidad</label>
+          <select id="nationality">
+            <option value="">Seleccionar pais...</option>
+            <optgroup label="Norteamerica">
+              <option value="ca">Canada</option>
+              <option value="mx">Mexico</option>
+              <option value="us">Estados Unidos</option>
+            </optgroup>
+            <optgroup label="Centroamerica">
+              <option value="bz">Belice</option>
+              <option value="cr">Costa Rica</option>
+              <option value="sv">El Salvador</option>
+              <option value="gt">Guatemala</option>
+              <option value="hn">Honduras</option>
+              <option value="ni">Nicaragua</option>
+              <option value="pa">Panama</option>
+            </optgroup>
+            <optgroup label="Caribe">
+              <option value="ag">Antigua y Barbuda</option>
+              <option value="bs">Bahamas</option>
+              <option value="bb">Barbados</option>
+              <option value="cu">Cuba</option>
+              <option value="dm">Dominica</option>
+              <option value="gd">Granada</option>
+              <option value="ht">Haiti</option>
+              <option value="jm">Jamaica</option>
+              <option value="do">Republica Dominicana</option>
+              <option value="kn">San Cristobal y Nieves</option>
+              <option value="lc">Santa Lucia</option>
+              <option value="vc">San Vicente y las Granadinas</option>
+              <option value="tt">Trinidad y Tobago</option>
+            </optgroup>
+            <optgroup label="Sudamerica">
+              <option value="ar">Argentina</option>
+              <option value="bo">Bolivia</option>
+              <option value="br">Brasil</option>
+              <option value="cl">Chile</option>
+              <option value="co">Colombia</option>
+              <option value="ec">Ecuador</option>
+              <option value="gy">Guyana</option>
+              <option value="py">Paraguay</option>
+              <option value="pe">Peru</option>
+              <option value="sr">Surinam</option>
+              <option value="uy">Uruguay</option>
+              <option value="ve">Venezuela</option>
+            </optgroup>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Foto / Logo del jugador</label>
+          <div class="drop-zone" id="dropZoneLogo">
+            <input type="file" id="fileInputLogo" accept="image/png,image/jpeg,image/webp,video/webm">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            <p>Arrastra una imagen o WEBM aqui</p>
+            <span class="hint">PNG / JPG / WEBP / WEBM - Click para seleccionar</span>
+          </div>
+        </div>
+
+        <div class="preview-area" id="previewArea">
+          <div class="preview-label" id="previewLabel"></div>
+          <div class="preview-box" id="previewBox"></div>
+          <div class="preview-actions">
+            <button type="button" class="btn btn-danger" id="btnRemoveLogo" style="padding:6px 12px; font-size:0.75rem;">Quitar archivo</button>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-top:8px;">
+          <button type="submit" class="btn btn-success" style="flex:1;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            Guardar Jugador
+          </button>
+          <button type="button" class="btn btn-secondary" id="btnCancel" style="flex:1;">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="duplicate-overlay" id="duplicateOverlay">
+  <div class="duplicate-box">
+    <h3>UID Duplicado</h3>
+    <p>Este UID ya se encuentra registrado previamente.</p>
+    <div class="duplicate-player" id="duplicatePlayerContent"></div>
+    <div style="display:flex; justify-content:center;">
+      <button class="btn btn-secondary" id="btnCloseDuplicate">Entendido</button>
+    </div>
+  </div>
+</div>
+
+<div class="confirm-overlay" id="confirmOverlay">
+  <div class="confirm-box">
+    <h3 id="confirmTitle">Estas seguro?</h3>
+    <p id="confirmMessage">Esta accion no se puede deshacer.</p>
+    <div class="confirm-actions">
+      <button class="btn btn-danger" id="confirmBtnYes">Si, continuar</button>
+      <button class="btn btn-secondary" id="confirmBtnNo">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div class="duplicate-overlay" id="importSummaryOverlay">
+  <div class="duplicate-box" style="max-width:640px;width:100%;">
+    <h3 style="color:var(--accent);">Importacion completada</h3>
+    <div id="importSummaryContent" style="margin-top:12px;"></div>
+    <div style="display:flex;justify-content:center;margin-top:18px;">
+      <button class="btn btn-secondary" id="btnCloseImportSummary">Entendido</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+
+<script>
+(function(){
+  'use strict';
+
+  const $ = id => document.getElementById(id);
+  const API_BASE = '';
+
+  let allPlayers = [];
+  let editingId = null;
+  let currentLogo = null;
+  let pendingFile = null;
+  let confirmCallback = null;
+
+  function showToast(msg, type) {
+    type = type || 'success';
+    const container = $('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = 'toast ' + type;
+    const icons = {
+      success: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>',
+      error: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>',
+      warning: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>'
+    };
+    toast.innerHTML = (icons[type] || icons.warning) + '<span>' + escapeHtml(msg) + '</span>';
+    container.appendChild(toast);
+    setTimeout(function() { if(toast.parentNode) toast.parentNode.removeChild(toast); }, 3000);
+  }
+
+  function escapeHtml(str) {
+    if(typeof str !== 'string') return '';
+    return str.replace(/[&<>"']/g, function(m){
+      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m];
+    });
+  }
+
+  function formatDate(iso) {
+    if(!iso) return '-';
+    const d = new Date(iso);
+    return d.toLocaleDateString('es-ES', { day:'2-digit', month:'short', year:'numeric' });
+  }
+
+  function getFlagPath(code) {
+    if(!code) return '';
+    return 'https://flagcdn.com/w80/' + code.toLowerCase() + '.png';
+  }
+
+  function getLogoType(path) {
+    if(!path) return 'png';
+    const p = path.toLowerCase();
+    if(p.endsWith('.webm')) return 'webm';
+    if(p.endsWith('.jpg') || p.endsWith('.jpeg')) return 'jpg';
+    if(p.endsWith('.webp')) return 'webp';
+    return 'png';
+  }
+
+  async function apiGetPlayers() {
+    const res = await fetch(API_BASE + '/api/players');
+    if(!res.ok) throw new Error('Error cargando jugadores');
+    const json = await res.json();
+    if(!json.success) throw new Error(json.error || 'Error cargando jugadores');
+    return json.data;
+  }
+
+  async function apiCreatePlayer(body) {
+    const res = await fetch(API_BASE + '/api/players', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if(!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Error creando jugador');
+    }
+    return res.json();
+  }
+
+  async function apiUpdatePlayer(id, body) {
+    const res = await fetch(API_BASE + '/api/players/' + id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if(!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Error actualizando jugador');
+    }
+    return res.json();
+  }
+
+  async function apiDeletePlayer(id) {
+    const res = await fetch(API_BASE + '/api/players/' + id, { method: 'DELETE' });
+    if(!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Error eliminando jugador');
+    }
+    return res.json();
+  }
+
+  async function apiUploadPlayer(file, uid) {
+    const form = new FormData();
+    form.append('uid', uid);
+    form.append('entityType', 'player');
+    form.append('logo', file);
+    const res = await fetch(API_BASE + '/api/upload-player', {
+      method: 'POST',
+      body: form
+    });
+    if(!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Error subiendo archivo');
+    }
+    const json = await res.json();
+    return json.data || json;
+  }
+
+  async function apiExportPlayers() {
+    const res = await fetch(API_BASE + '/api/players');
+    if(!res.ok) throw new Error('Error exportando');
+    const json = await res.json();
+    if(!json.success) throw new Error(json.error || 'Error exportando');
+    return JSON.stringify(json.data, null, 2);
+  }
+
+  async function apiBatchImport(players) {
+    const res = await fetch(API_BASE + '/api/players/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(players)
+    });
+    if(!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Error en importacion batch');
+    }
+    return res.json();
+  }
+
+  async function loadAllPlayers() {
+    try {
+      allPlayers = await apiGetPlayers();
+      renderPlayers();
+    } catch(err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  function renderPlayers() {
+    const grid = $('playersGrid');
+    const query = $('searchInput').value.trim().toLowerCase();
+    let players = [...allPlayers];
+
+    if(query) {
+      players = players.filter(function(p) {
+        return (p.nickname || '').toLowerCase().includes(query) ||
+               (p.uid || '').toLowerCase().includes(query) ||
+               (p.nombre || '').toLowerCase().includes(query) ||
+               (p.discordId || '').toLowerCase().includes(query);
+      });
+    }
+
+    if(players.length === 0) {
+      grid.innerHTML = emptyStateHTML(query);
+      return;
+    }
+
+    const frag = document.createDocumentFragment();
+    players.forEach(function(p) {
+      const card = document.createElement('div');
+      card.className = 'player-card';
+      card.dataset.id = p.id;
+
+      var logoSrc = p.logo || '/logos/default.png';
+      var logoType = p.logoType || getLogoType(p.logo);
+      var mediaHtml = '';
+
+      if(logoType === 'webm'){
+        mediaHtml = '<video src="' + escapeHtml(logoSrc) + '" muted loop preload="metadata" playsinline onmouseenter="this.play()" onmouseleave="this.pause();this.currentTime=0;"></video>';
+      }else{
+        mediaHtml = '<img src="' + escapeHtml(logoSrc) + '" loading="lazy" onerror="this.src=\'/logos/default.png\'">';
+      }
+
+      var flagHtml = '';
+      if(p.nationality) {
+        flagHtml = '<div class="card-flag"><img src="' + escapeHtml(getFlagPath(p.nationality)) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'"></div>';
+      }
+
+      var discordHtml = '';
+      if(p.discordId) {
+        discordHtml = '<span class="discord"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028z"/></svg>' + escapeHtml(p.discordId) + '</span>';
+      }
+
+      card.innerHTML =
+        '<div class="card-media">' + mediaHtml + '</div>' +
+        flagHtml +
+        '<div class="card-body">' +
+          '<h3 class="nickname">' + escapeHtml(p.nickname) + '</h3>' +
+          '<div class="card-meta">' +
+            '<span class="uid">UID: ' + escapeHtml(p.uid) + '</span>' +
+            discordHtml +
+            (p.nombre ? '<span>' + escapeHtml(p.nombre) + '</span>' : '') +
+          '</div>' +
+        '</div>' +
+        '<div class="card-actions">' +
+          '<button class="btn btn-secondary" data-action="edit" data-id="' + escapeHtml(p.id) + '">Editar</button>' +
+          '<button class="btn btn-danger" data-action="delete" data-id="' + escapeHtml(p.id) + '">Eliminar</button>' +
+        '</div>';
+
+      frag.appendChild(card);
+    });
+
+    grid.innerHTML = '';
+    grid.appendChild(frag);
+    setupVideoHover(grid);
+  }
+
+  function emptyStateHTML(query) {
+    return '<div class="empty-state">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>' +
+      '<h3>' + (query ? 'Sin resultados' : 'Sin jugadores registrados') + '</h3>' +
+      '<p>' + (query ? 'Intenta con otra busqueda.' : 'Haz clic en "Agregar Jugador" para comenzar.') + '</p></div>';
+  }
+
+  function setupVideoHover(root) {
+    if(!root) return;
+    var videos = root.querySelectorAll('video');
+    videos.forEach(function(video) {
+      if(video.dataset.hoverReady === '1') return;
+      video.dataset.hoverReady = '1';
+      video.autoplay = false;
+      video.removeAttribute('autoplay');
+      if(!video.hasAttribute('preload') || video.getAttribute('preload') === 'auto') {
+        video.preload = 'metadata';
+      }
+      video.pause();
+      try { video.currentTime = 0; } catch(e){}
+
+      var target = video.closest('.card-media') || video;
+      target.addEventListener('mouseenter', function() {
+        if(video.preload === 'none') { video.preload = 'metadata'; video.load(); }
+        var p = video.play();
+        if(p && typeof p.catch === 'function') p.catch(function(){});
+      });
+      target.addEventListener('mouseleave', function() {
+        video.pause();
+        try { video.currentTime = 0; } catch(e){}
+      });
+    });
+  }
+
+  function setupEvents() {
+    $('playersGrid').addEventListener('click', function(e) {
+      var btn = e.target.closest('button[data-action]');
+      if(!btn) return;
+      var action = btn.dataset.action;
+      var id = btn.dataset.id;
+      if(action === 'edit') openModal(id);
+      else if(action === 'delete') deletePlayer(id);
+    });
+
+    $('btnAddPlayer').addEventListener('click', function() { openModal(); });
+    $('btnExport').addEventListener('click', exportJSON);
+    $('btnImportTrigger').addEventListener('click', function() { $('importFile').click(); });
+    $('importFile').addEventListener('change', function(e) { importJSON(e.target); });
+    $('btnImportCSVTrigger').addEventListener('click', function() { $('importCSVFile').click(); });
+    $('importCSVFile').addEventListener('change', function(e) { importCSV(e.target); });
+    $('btnClearDB').addEventListener('click', confirmClearDB);
+
+    $('modalClose').addEventListener('click', closeModal);
+    $('btnCancel').addEventListener('click', closeModal);
+    $('modalOverlay').addEventListener('click', function(e) { if(e.target === $('modalOverlay')) closeModal(); });
+    $('playerForm').addEventListener('submit', savePlayer);
+    $('btnRemoveLogo').addEventListener('click', resetFiles);
+
+    $('searchInput').addEventListener('input', renderPlayers);
+
+    $('confirmBtnYes').addEventListener('click', function() { if(confirmCallback) confirmCallback(); closeConfirm(); });
+    $('confirmBtnNo').addEventListener('click', closeConfirm);
+    $('confirmOverlay').addEventListener('click', function(e) { if(e.target === $('confirmOverlay')) closeConfirm(); });
+
+    $('btnCloseDuplicate').addEventListener('click', function() { $('duplicateOverlay').classList.remove('active'); });
+    $('duplicateOverlay').addEventListener('click', function(e) { if(e.target === $('duplicateOverlay')) $('duplicateOverlay').classList.remove('active'); });
+
+    $('btnCloseImportSummary').addEventListener('click', function() { $('importSummaryOverlay').classList.remove('active'); });
+    $('importSummaryOverlay').addEventListener('click', function(e) { if(e.target === $('importSummaryOverlay')) $('importSummaryOverlay').classList.remove('active'); });
+  }
+
+  function openModal(id) {
+    editingId = id || null;
+    $('modalTitle').textContent = id ? 'Editar Jugador' : 'Agregar Jugador';
+    $('modalOverlay').classList.add('active');
+    document.body.style.overflow = 'hidden';
+
+    if(!id) {
+      resetFormNew();
+    } else {
+      fillFormEdit(id);
+    }
+  }
+
+  function resetFormNew() {
+    $('uid').value = '';
+    $('uid').readOnly = false;
+    $('nickname').value = '';
+    $('nombre').value = '';
+    $('discordId').value = '';
+    $('nationality').value = '';
+    resetFiles();
+  }
+
+  function fillFormEdit(id) {
+    var p = allPlayers.find(function(x) { return x.id === id; });
+    if(!p) { closeModal(); return; }
+
+    $('uid').value = p.uid;
+    $('uid').readOnly = true;
+    $('nickname').value = p.nickname;
+    $('nombre').value = p.nombre || '';
+    $('discordId').value = p.discordId || '';
+    $('nationality').value = p.nationality || '';
+
+    currentLogo = p.logo || null;
+    if(p.logo) showPreview(p.logo, p.logoType || getLogoType(p.logo));
+  }
+
+  function closeModal() {
+    $('modalOverlay').classList.remove('active');
+    document.body.style.overflow = '';
+    editingId = null;
+    resetFiles();
+  }
+
+  function resetFiles() {
+    currentLogo = null;
+    pendingFile = null;
+    var input = $('fileInputLogo');
+    if(input) input.value = '';
+    $('previewArea').classList.remove('active');
+    $('previewBox').innerHTML = '';
+    $('previewLabel').textContent = '';
+  }
+
+  function showPreview(dataUrl, type) {
+    var area = $('previewArea');
+    var label = $('previewLabel');
+    var box = $('previewBox');
+    area.classList.add('active');
+    label.textContent = 'Vista previa (' + (type || 'img').toUpperCase() + ')';
+    if(type === 'webm') {
+      box.innerHTML = '<video src="' + escapeHtml(dataUrl) + '" muted loop playsinline preload="metadata" style="max-width:100%;max-height:100%;object-fit:contain;"></video>';
+    } else {
+      box.innerHTML = '<img src="' + escapeHtml(dataUrl) + '" alt="" onerror="this.src=\'/logos/default.png\'" style="max-width:100%;max-height:100%;object-fit:contain;">';
+    }
+    setupVideoHover(box);
+  }
+
+  function initDragDrop() {
+    var zone = $('dropZoneLogo');
+    var fileInput = $('fileInputLogo');
+
+    ['dragenter','dragover','dragleave','drop'].forEach(function(evt) {
+      zone.addEventListener(evt, preventDefaults, false);
+    });
+
+    zone.addEventListener('dragenter', function() { zone.classList.add('dragover'); });
+    zone.addEventListener('dragleave', function() { zone.classList.remove('dragover'); });
+    zone.addEventListener('drop', function(e) {
+      zone.classList.remove('dragover');
+      handleFiles(e.dataTransfer.files);
+    });
+
+    fileInput.addEventListener('change', function(e) { handleFiles(e.target.files); });
+  }
+
+  function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
+
+  function handleFiles(files) {
+    if(!files || !files.length) return;
+    var file = files[0];
+    var type = file.type;
+    var isImage = type.indexOf('image/') === 0;
+    var isWebm = type === 'video/webm';
+
+    if(!isImage && !isWebm) {
+      showToast('Formato no soportado. Usa PNG, JPG, WEBP o WEBM.', 'error');
+      return;
+    }
+
+    var maxSize = isWebm ? 20 * 1024 * 1024 : 5 * 1024 * 1024;
+    if(file.size > maxSize) {
+      showToast('Archivo demasiado grande. Max: ' + (isWebm ? '20MB' : '5MB'), 'error');
+      return;
+    }
+
+    pendingFile = file;
+    currentLogo = URL.createObjectURL(file);
+    var ext = isWebm ? 'webm' : (type.split('/')[1] || 'png');
+    showPreview(currentLogo, ext === 'jpeg' ? 'jpg' : ext);
+    showToast('Archivo listo para subir.', 'success');
+  }
+
+  async function savePlayer(e) {
+    e.preventDefault();
+    var uid = $('uid').value.trim();
+    var nickname = $('nickname').value.trim();
+    var nombre = $('nombre').value.trim();
+    var discordId = $('discordId').value.trim();
+    var nationality = $('nationality').value;
+
+    if(!uid || !nickname) {
+      showToast('Nickname y UID son obligatorios.', 'error');
+      return;
+    }
+
+    try {
+      if(editingId) {
+        var existing = allPlayers.find(function(p) { return p.id === editingId; });
+        var logoPath = currentLogo;
+
+        if(pendingFile && existing) {
+          var uploadRes = await apiUploadPlayer(pendingFile, existing.uid);
+          logoPath = uploadRes.logo;
+          pendingFile = null;
+        }
+
+        var body = {
+          uid: uid,
+          nickname: nickname,
+          nombre: nombre || '',
+          discordId: discordId || '',
+          nationality: nationality || '',
+          logo: logoPath || '/logos/default.png',
+          logoType: logoPath ? getLogoType(logoPath) : 'png'
+        };
+
+        await apiUpdatePlayer(editingId, body);
+        showToast('Jugador actualizado.', 'success');
+        await loadAllPlayers();
+        closeModal();
+      } else {
+        var body = {
+          uid: uid,
+          nickname: nickname,
+          nombre: nombre || '',
+          discordId: discordId || '',
+          nationality: nationality || '',
+          logo: '/logos/default.png',
+          logoType: 'png'
+        };
+
+        var created = await apiCreatePlayer(body);
+        var newPlayer = created.data || created;
+
+        if(pendingFile && newPlayer.uid) {
+          var uploadRes = await apiUploadPlayer(pendingFile, newPlayer.uid);
+          await apiUpdatePlayer(newPlayer.id, { logo: uploadRes.logo, logoType: uploadRes.logoType });
+          pendingFile = null;
+        }
+
+        showToast('Jugador creado.', 'success');
+        await loadAllPlayers();
+        closeModal();
+      }
+    } catch(err) {
+      if(err.message && err.message.indexOf('UID ya registrado') >= 0) {
+        var existing = allPlayers.find(function(p) { return p.uid === uid; });
+        if(existing) showDuplicateModal(existing);
+      }
+      showToast(err.message, 'error');
+    }
+  }
+
+  function showDuplicateModal(existing) {
+    var overlay = $('duplicateOverlay');
+    var container = $('duplicatePlayerContent');
+
+    var dupLogo = existing.logo || '/logos/default.png';
+    var dupLogoType = existing.logoType || getLogoType(existing.logo);
+    var media = '';
+    if(dupLogoType === 'webm') {
+      media = '<div class="dup-media"><video src="' + escapeHtml(dupLogo) + '" muted loop playsinline preload="metadata" style="width:100%;height:100%;object-fit:cover;"></video></div>';
+    } else {
+      media = '<div class="dup-media"><img src="' + escapeHtml(dupLogo) + '" alt="" onerror="this.src=\'/logos/default.png\'" style="width:100%;height:100%;object-fit:cover;"></div>';
+    }
+
+    var dupFlag = '';
+    if(existing.nationality) {
+      dupFlag = '<img src="' + escapeHtml(getFlagPath(existing.nationality)) + '" alt="" loading="lazy" style="width:28px;height:20px;border-radius:3px;border:1px solid var(--border);margin-bottom:6px;display:block;">'; 
+    }
+
+    container.innerHTML =
+      media +
+      '<div class="dup-info">' +
+        dupFlag +
+        '<strong>' + escapeHtml(existing.nickname) + '</strong>' +
+        '<span>Nombre: ' + escapeHtml(existing.nombre || '-') + '</span>' +
+        '<span>UID: ' + escapeHtml(existing.uid) + '</span>' +
+        '<span>Registrado: ' + formatDate(existing.createdAt) + '</span>' +
+      '</div>';
+
+    overlay.classList.add('active');
+    setupVideoHover(container);
+  }
+
+  function deletePlayer(id) {
+    var p = allPlayers.find(function(x) { return x.id === id; });
+    if(!p) return;
+    openConfirm(
+      'Eliminar jugador?',
+      'Se eliminara permanentemente a <strong>' + escapeHtml(p.nickname) + '</strong>.',
+      async function() {
+        try {
+          await apiDeletePlayer(id);
+          await loadAllPlayers();
+          showToast('Jugador eliminado.', 'success');
+        } catch(err) {
+          showToast(err.message, 'error');
+        }
+      }
+    );
+  }
+
+  function openConfirm(title, message, onYes) {
+    confirmCallback = onYes;
+    $('confirmTitle').textContent = title;
+    $('confirmMessage').innerHTML = message;
+    $('confirmOverlay').classList.add('active');
+  }
+
+  function closeConfirm() {
+    $('confirmOverlay').classList.remove('active');
+    confirmCallback = null;
+  }
+
+  async function exportJSON() {
+    try {
+      var dataStr = await apiExportPlayers();
+      var blob = new Blob([dataStr], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'players.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('JSON exportado.', 'success');
+    } catch(err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  async function importJSON(input) {
+    var file = input.files[0];
+    if(!file) return;
+    var reader = new FileReader();
+    reader.onload = async function(ev) {
+      try {
+        var data = JSON.parse(ev.target.result);
+        if(!Array.isArray(data)) throw new Error('Formato invalido');
+        var valid = data.every(function(d) { return d && typeof d.uid === 'string' && typeof d.nickname === 'string'; });
+        if(!valid) throw new Error('Estructura invalida');
+
+        openConfirm(
+          'Importar JSON',
+          'Esto agregara ' + data.length + ' jugador(es). Los existentes con mismo UID generaran error.',
+          async function() {
+            try {
+              var imported = 0;
+              for(var i = 0; i < data.length; i++) {
+                try {
+                  await apiCreatePlayer(data[i]);
+                  imported++;
+                } catch(e) {
+                  console.warn('Skip duplicado:', data[i].uid);
+                }
+              }
+              await loadAllPlayers();
+              showToast(imported + ' jugadores importados.', 'success');
+            } catch(err) {
+              showToast(err.message, 'error');
+            }
+          }
+        );
+      } catch(err) {
+        showToast('Error al importar: ' + err.message, 'error');
+      }
+      input.value = '';
+    };
+    reader.readAsText(file);
+  }
+
+  function confirmClearDB() {
+    openConfirm(
+      'Limpiar base de datos?',
+      'Se eliminaran TODOS los jugadores permanentemente.',
+      async function() {
+        try {
+          var players = await apiGetPlayers();
+          for(var i = 0; i < players.length; i++) {
+            await apiDeletePlayer(players[i].id);
+          }
+          await loadAllPlayers();
+          showToast('Base de datos limpiada.', 'success');
+        } catch(err) {
+          showToast(err.message, 'error');
+        }
+      }
+    );
+  }
+
+  function detectDelimiter(line) {
+    var counts = {};
+    [';', ',', '\t'].forEach(function(d) {
+      counts[d] = (line.match(new RegExp(d.replace('\t', '\t'), 'g')) || []).length;
+    });
+    var best = ',';
+    var max = counts[','];
+    if(counts[';'] > max) { best = ';'; max = counts[';']; }
+    if(counts['\t'] > max) { best = '\t'; }
+    return best;
+  }
+
+  function parseCSV(text) {
+    var lines = text.split(/\r?\n/).filter(function(l) { return l.trim().length > 0; });
+    if(lines.length < 2) return [];
+    var delimiter = detectDelimiter(lines[0]);
+    var headers = lines[0].split(delimiter).map(function(h) { return h.trim().toLowerCase(); });
+    var rows = [];
+    for(var i = 1; i < lines.length; i++) {
+      var cols = lines[i].split(delimiter).map(function(c) { return c.trim(); });
+      if(cols.length < 2) continue;
+      var row = {};
+      headers.forEach(function(h, idx) {
+        if(idx < cols.length) row[h] = cols[idx];
+      });
+      rows.push(row);
+    }
+    return rows;
+  }
+
+  function mapCSVRow(row) {
+    return {
+      uid: (row.uid || '').trim(),
+      nickname: (row.nickname || '').trim(),
+      nombre: (row.nombre || row.name || '').trim(),
+      discordId: (row['discord id'] || row.discordid || row.discord || '').trim(),
+      nationality: (row.nationality || row.iso || '').trim(),
+      logo: '/logos/default.png',
+      logoType: 'png'
+    };
+  }
+
+  function showImportSummary(result) {
+    var overlay = $('importSummaryOverlay');
+    var container = $('importSummaryContent');
+    var inserted = result.inserted || [];
+    var duplicates = result.duplicates || [];
+    var invalid = result.invalid || [];
+
+    var htmlSummary = '<div style="text-align:left; max-height:60vh; overflow-y:auto; padding-right:8px;">';
+    htmlSummary += '<div style="display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap;">';
+    htmlSummary += '<div style="background:var(--bg-primary); border:1px solid var(--border); border-radius:var(--radius-sm); padding:12px 16px; flex:1; min-width:120px; text-align:center;">';
+    htmlSummary += '<div style="font-size:1.5rem; font-weight:800; color:var(--success);">' + inserted.length + '</div>';
+    htmlSummary += '<div style="font-size:0.8rem; color:var(--text-secondary);">Guardados</div></div>';
+    htmlSummary += '<div style="background:var(--bg-primary); border:1px solid var(--border); border-radius:var(--radius-sm); padding:12px 16px; flex:1; min-width:120px; text-align:center;">';
+    htmlSummary += '<div style="font-size:1.5rem; font-weight:800; color:var(--danger);">' + duplicates.length + '</div>';
+    htmlSummary += '<div style="font-size:0.8rem; color:var(--text-secondary);">Duplicados</div></div>';
+    htmlSummary += '<div style="background:var(--bg-primary); border:1px solid var(--border); border-radius:var(--radius-sm); padding:12px 16px; flex:1; min-width:120px; text-align:center;">';
+    htmlSummary += '<div style="font-size:1.5rem; font-weight:800; color:var(--warning);">' + invalid.length + '</div>';
+    htmlSummary += '<div style="font-size:0.8rem; color:var(--text-secondary);">Invalidos</div></div>';
+    htmlSummary += '</div>';
+
+    if(duplicates.length > 0) {
+      htmlSummary += '<h4 style="margin:12px 0 8px; font-size:0.95rem; color:var(--danger);">Duplicados</h4>';
+      htmlSummary += '<table style="width:100%; border-collapse:collapse; font-size:0.85rem;">';
+      htmlSummary += '<thead><tr style="border-bottom:1px solid var(--border);">';
+      htmlSummary += '<th style="text-align:left; padding:6px 4px; color:var(--text-secondary);">UID</th>';
+      htmlSummary += '<th style="text-align:left; padding:6px 4px; color:var(--text-secondary);">Nickname CSV</th>';
+      htmlSummary += '<th style="text-align:left; padding:6px 4px; color:var(--text-secondary);">Nickname BD</th>';
+      htmlSummary += '<th style="text-align:left; padding:6px 4px; color:var(--text-secondary);">Razon</th>';
+      htmlSummary += '</tr></thead><tbody>';
+      duplicates.forEach(function(d) {
+        htmlSummary += '<tr style="border-bottom:1px solid var(--border);">';
+        htmlSummary += '<td style="padding:6px 4px; font-family:monospace; font-size:0.8rem;">' + escapeHtml(d.uid) + '</td>';
+        htmlSummary += '<td style="padding:6px 4px;">' + escapeHtml(d.nickname) + '</td>';
+        htmlSummary += '<td style="padding:6px 4px;">' + escapeHtml(d.existing ? d.existing.nickname : '-') + '</td>';
+        htmlSummary += '<td style="padding:6px 4px; color:var(--danger);">' + escapeHtml(d.reason) + '</td>';
+        htmlSummary += '</tr>';
+      });
+      htmlSummary += '</tbody></table>';
+    }
+
+    if(invalid.length > 0) {
+      htmlSummary += '<h4 style="margin:16px 0 8px; font-size:0.95rem; color:var(--warning);">Invalidos</h4>';
+      htmlSummary += '<table style="width:100%; border-collapse:collapse; font-size:0.85rem;">';
+      htmlSummary += '<thead><tr style="border-bottom:1px solid var(--border);">';
+      htmlSummary += '<th style="text-align:left; padding:6px 4px; color:var(--text-secondary);">UID</th>';
+      htmlSummary += '<th style="text-align:left; padding:6px 4px; color:var(--text-secondary);">Nickname</th>';
+      htmlSummary += '<th style="text-align:left; padding:6px 4px; color:var(--text-secondary);">Razon</th>';
+      htmlSummary += '</tr></thead><tbody>';
+      invalid.forEach(function(inv) {
+        htmlSummary += '<tr style="border-bottom:1px solid var(--border);">';
+        htmlSummary += '<td style="padding:6px 4px; font-family:monospace; font-size:0.8rem;">' + escapeHtml(inv.uid || '-') + '</td>';
+        htmlSummary += '<td style="padding:6px 4px;">' + escapeHtml(inv.nickname || '-') + '</td>';
+        htmlSummary += '<td style="padding:6px 4px; color:var(--warning);">' + escapeHtml(inv.reason) + '</td>';
+        htmlSummary += '</tr>';
+      });
+      htmlSummary += '</tbody></table>';
+    }
+
+    htmlSummary += '</div>';
+    container.innerHTML = htmlSummary;
+    overlay.classList.add('active');
+  }
+
+  async function importCSV(input) {
+    var file = input.files[0];
+    if(!file) return;
+    var reader = new FileReader();
+    reader.onload = async function(ev) {
+      try {
+        var rows = parseCSV(ev.target.result);
+        if(rows.length === 0) {
+          showToast('CSV vacio o formato invalido.', 'error');
+          input.value = '';
+          return;
+        }
+        var players = rows.map(mapCSVRow).filter(function(p) { return p.uid && p.nickname; });
+        if(players.length === 0) {
+          showToast('No se encontraron jugadores validos en el CSV.', 'error');
+          input.value = '';
+          return;
+        }
+        var result = await apiBatchImport(players);
+        await loadAllPlayers();
+        showImportSummary(result);
+        showToast(players.length + ' procesados. ' + (result.inserted || []).length + ' guardados.', 'success');
+      } catch(err) {
+        showToast('Error CSV: ' + err.message, 'error');
+      }
+      input.value = '';
+    };
+    reader.readAsText(file);
+  }
+
+  function init() {
+    initDragDrop();
+    setupEvents();
+    loadAllPlayers();
+  }
+
+  window.addEventListener('error', function(e) {
+    console.error('PLAYER MANAGER ERROR:', e.error || e.message);
+  });
+
+  document.addEventListener('DOMContentLoaded', init);
+})();
+</script>
+
+</body>
+</html>

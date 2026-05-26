@@ -1,0 +1,249 @@
+{
+  "eventName": "srd",
+  "eventDate": "2026-05-20",
+  "generatedAt": "2026-05-20T22:54:46.602Z",
+  "teams": [
+    {
+      "teamId": "T-0001",
+      "teamName": "LOS MAS GUAPOS",
+      "logoPng": "/logos/T-0001.png",
+      "logoWebm": "/logos/T-0001.webm",
+      "flagPng": "/logos/T-0001B.png",
+      "flagWebm": "",
+      "primaryColor": "#9418F1",
+      "secondaryColor": "#F6F500",
+      "tag": "LMG"
+    },
+    {
+      "teamId": "T-0002",
+      "teamName": "ELEGAMPIS",
+      "logoPng": "/logos/T-0002.png",
+      "logoWebm": "",
+      "flagPng": "/logos/T-0002B.png",
+      "flagWebm": "",
+      "primaryColor": "#0C1F42",
+      "secondaryColor": "#908B5B",
+      "tag": "ELG"
+    },
+    {
+      "teamId": "T-0003",
+      "teamName": "KLILLER SQUAD",
+      "logoPng": "/logos/T-0003.png",
+      "logoWebm": "",
+      "flagPng": "/logos/T-0003B.png",
+      "flagWebm": "",
+      "primaryColor": "#DFB47A",
+      "secondaryColor": "#32373A",
+      "tag": "KS"
+    },
+    {
+      "teamId": "T-0004",
+      "teamName": "TEAM GUAMPA",
+      "logoPng": "/logos/T-0004.png",
+      "logoWebm": "/logos/T-0004.webm",
+      "flagPng": "/logos/T-0004B.png",
+      "flagWebm": "",
+      "primaryColor": "#FF0000",
+      "secondaryColor": "#C90000",
+      "tag": "TG"
+    },
+    {
+      "teamId": "T-0005",
+      "teamName": "SEÑORES GAMING",
+      "logoPng": "/logos/T-0005.png",
+      "logoWebm": "",
+      "flagPng": "/logos/T-0005B.png",
+      "flagWebm": "",
+      "primaryColor": "#00FF02",
+      "secondaryColor": "#680105",
+      "tag": "SIR"
+    },
+    {
+      "teamId": "T-0006",
+      "teamName": "PITIWAI GAMING",
+      "logoPng": "/logos/T-0006.png",
+      "logoWebm": "",
+      "flagPng": "/logos/T-0006B.png",
+      "flagWebm": "",
+      "primaryColor": "#190E0C",
+      "secondaryColor": "#190E0C",
+      "tag": "PG"
+    },
+    {
+      "teamId": "T-0007",
+      "teamName": "LOS BALA LOCA",
+      "logoPng": "/logos/T-0007.png",
+      "logoWebm": "/logos/T-0007.webm",
+      "flagPng": "/logos/T-0007B.png",
+      "flagWebm": "",
+      "primaryColor": "#ED5B25",
+      "secondaryColor": "#ED5B25",
+      "tag": "LBL"
+    },
+    {
+      "teamId": "T-0008",
+      "teamName": "LA BANDA",
+      "logoPng": "/logos/T-0008.png",
+      "logoWebm": "",
+      "flagPng": "/logos/T-0008B.png",
+      "flagWebm": "",
+      "primaryColor": "#89A7A7",
+      "secondaryColor": "#369790",
+      "tag": "LB"
+    },
+    {
+      "teamId": "T-0009",
+      "teamName": "REVOLUTION GAMING GT",
+      "logoPng": "/logos/T-0009.png",
+      "logoWebm": "",
+      "flagPng": "/logos/T-0009B.png",
+      "flagWebm": "",
+      "primaryColor": "#5F6062",
+      "secondaryColor": "#5F6062",
+      "tag": "RG"
+    },
+    {
+      "teamId": "T-0010",
+      "teamName": "WILD HORSES",
+      "logoPng": "/logos/T-0010.png",
+      "logoWebm": "",
+      "flagPng": "/logos/T-0010B.png",
+      "flagWebm": "",
+      "primaryColor": "#585C5F",
+      "secondaryColor": "#EEF0EF",
+      "tag": "WH"
+    },
+    {
+      "teamId": "T-0011",
+      "teamName": "ERROR 404",
+      "logoPng": "/logos/T-0011.png",
+      "logoWebm": "/logos/T-0011.webm",
+      "flagPng": "/logos/T-0011B.png",
+      "flagWebm": "",
+      "primaryColor": "#474747",
+      "secondaryColor": "#474747",
+      "tag": "404"
+    },
+    {
+      "teamId": "T-0012",
+      "teamName": "RENGOS",
+      "logoPng": "/logos/T-0012.png",
+      "logoWebm": "",
+      "flagPng": "/logos/T-0012B.png",
+      "flagWebm": "",
+      "primaryColor": "#FF3131",
+      "secondaryColor": "#FF3131",
+      "tag": "REN"
+    },
+    {
+      "teamId": "T-0013",
+      "teamName": "HELLSING",
+      "logoPng": "/logos/T-0013.png",
+      "logoWebm": "",
+      "flagPng": "/logos/T-0013B.png",
+      "flagWebm": "",
+      "primaryColor": "#2D85DC",
+      "secondaryColor": "#25FCF2",
+      "tag": "HELL"
+    },
+    {
+      "teamId": "T-0014",
+      "teamName": "TEAM PINOCHO",
+      "logoPng": "/logos/T-0014.png",
+      "logoWebm": "",
+      "flagPng": "/logos/T-0014B.png",
+      "flagWebm": "",
+      "primaryColor": "#FD6C05",
+      "secondaryColor": "#00183F",
+      "tag": "TP"
+    },
+    {
+      "teamId": "T-0015",
+      "teamName": "THE GHOSTH",
+      "logoPng": "/logos/T-0015.png",
+      "logoWebm": "",
+      "flagPng": "/logos/T-0015B.png",
+      "flagWebm": "",
+      "primaryColor": "#51097E",
+      "secondaryColor": "#13C8C9",
+      "tag": ""
+    },
+    {
+      "teamId": "T-0016",
+      "teamName": "WOLVES AND RAVENS",
+      "logoPng": "/logos/T-0016.png",
+      "logoWebm": "",
+      "flagPng": "/logos/T-0016B.png",
+      "flagWebm": "",
+      "primaryColor": "#A15E09",
+      "secondaryColor": "#3E008C",
+      "tag": "WR"
+    },
+    {
+      "teamId": "T-0017",
+      "teamName": "NOBLE SIX",
+      "logoPng": "/logos/T-0017.png",
+      "logoWebm": "",
+      "flagPng": "/logos/T-0017B.png",
+      "flagWebm": "",
+      "primaryColor": "#8B0135",
+      "secondaryColor": "#8B0135",
+      "tag": "NS"
+    },
+    {
+      "teamId": "T-0018",
+      "teamName": "THE POWER WOMEN",
+      "logoPng": "/logos/T-0018.png",
+      "logoWebm": "",
+      "flagPng": "/logos/T-0018B.png",
+      "flagWebm": "",
+      "primaryColor": "#F03082",
+      "secondaryColor": "#F03082",
+      "tag": "TPW"
+    },
+    {
+      "teamId": "T-0019",
+      "teamName": "NCA×TÓXICO×",
+      "logoPng": "/logos/T-0019.png",
+      "logoWebm": "",
+      "flagPng": "/logos/T-0019B.png",
+      "flagWebm": "",
+      "primaryColor": "#2C4E05",
+      "secondaryColor": "#B1D60B",
+      "tag": "TX"
+    },
+    {
+      "teamId": "T-0020",
+      "teamName": "IMPERIO KILLER",
+      "logoPng": "/logos/T-0020.png",
+      "logoWebm": "",
+      "flagPng": "/logos/T-0020B.png",
+      "flagWebm": "",
+      "primaryColor": "#05FEFF",
+      "secondaryColor": "#6517AB",
+      "tag": "IK"
+    },
+    {
+      "teamId": "T-0021",
+      "teamName": "CHACALES MX",
+      "logoPng": "/logos/T-0021.png",
+      "logoWebm": "",
+      "flagPng": "/logos/T-0021B.png",
+      "flagWebm": "",
+      "primaryColor": "#AF0207",
+      "secondaryColor": "#AF0207",
+      "tag": "CM"
+    },
+    {
+      "teamId": "T-0022",
+      "teamName": "CUERNINI TORINI",
+      "logoPng": "/logos/T-0022.png",
+      "logoWebm": "",
+      "flagPng": "/logos/T-0022B.png",
+      "flagWebm": "",
+      "primaryColor": "#797979",
+      "secondaryColor": "#797979",
+      "tag": "CT"
+    }
+  ]
+}

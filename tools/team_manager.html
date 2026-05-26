@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TEAM MANAGER - Esports Database</title>
+<style>
+/* ============================================
+     RESET & BASE
+     ============================================ */
+  *, *::before, *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  :root {
+    --bg-primary: #0f1115;
+    --bg-secondary: #1a1d24;
+    --bg-card: #21252e;
+    --bg-hover: #2a2f3a;
+    --border: #2f3542;
+    --text-primary: #e8ecf1;
+    --text-secondary: #9aa3b2;
+    --accent: #3b82f6;
+    --accent-hover: #2563eb;
+    --danger: #ef4444;
+    --danger-hover: #dc2626;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --shadow: 0 4px 20px rgba(0,0,0,0.35);
+    --shadow-lg: 0 10px 40px rgba(0,0,0,0.5);
+    --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    line-height: 1.5;
+    overflow-x: hidden;
+  }
+
+  /* Scrollbar personalizada */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--bg-primary);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+  }
+
+  /* ============================================
+     HEADER
+     ============================================ */
+  .header {
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 32px 24px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .header::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: radial-gradient(circle at 50% 0%, rgba(59,130,246,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .header h1 {
+    font-size: 2.2rem;
+    font-weight: 800;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    background: linear-gradient(90deg, #fff 0%, #94a3b8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    position: relative;
+    z-index: 1;
+  }
+
+  .header p {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    margin-top: 6px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ============================================
+     CONTAINER & PANEL SUPERIOR
+     ============================================ */
+  .container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+
+  .top-panel {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 28px;
+    padding: 18px 20px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+
+  .btn-group {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 18px;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+    color: #fff;
+    background: var(--accent);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn:hover {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(59,130,246,0.25);
+  }
+
+  .btn:active {
+    transform: translateY(0);
+  }
+
+  .btn-secondary {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover {
+    background: var(--border);
+    box-shadow: none;
+  }
+
+  .btn-danger {
+    background: var(--danger);
+  }
+  .btn-danger:hover {
+    background: var(--danger-hover);
+    box-shadow: 0 4px 12px rgba(239,68,68,0.25);
+  }
+
+  .btn-success {
+    background: var(--success);
+  }
+  .btn-success:hover {
+    background: #16a34a;
+    box-shadow: 0 4px 12px rgba(34,197,94,0.25);
+  }
+
+  .search-box {
+    position: relative;
+    min-width: 260px;
+    flex: 1;
+    max-width: 400px;
+  }
+
+  .search-box input {
+    width: 100%;
+    padding: 10px 14px 10px 38px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    transition: var(--transition);
+  }
+
+  .search-box input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+  }
+
+  .search-box svg {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-secondary);
+    width: 16px;
+    height: 16px;
+  }
+
+  /* ============================================
+     GRID DE EQUIPOS
+     ============================================ */
+  .teams-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+  }
+
+  .team-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    transition: var(--transition);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .team-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--primary, var(--accent)), var(--secondary, var(--text-secondary)));
+    opacity: 0.8;
+  }
+
+  .team-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--bg-hover);
+  }
+
+  .card-logo-wrap {
+    width: 100%;
+    aspect-ratio: 16/9;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .card-logo-wrap img,
+  .card-logo-wrap video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+
+  /* ============================================
+     BANDERA (FLAG)
+     ============================================ */
+  .card-flag-wrap {
+    width: 100%;
+    aspect-ratio: 3/1;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+    margin-top: 4px;
+    border: 1px solid var(--border);
+  }
+  .card-flag-wrap img,
+  .card-flag-wrap video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .card-logo-placeholder {
+    font-size: 3rem;
+    color: var(--border);
+  }
+
+  .card-info h3 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    word-break: break-word;
+  }
+
+  .card-tag {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+    margin-top: 2px;
+  }
+
+  .card-meta {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .card-colors {
+    display: flex;
+    gap: 8px;
+    margin-top: 2px;
+  }
+
+  .color-dot {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid var(--bg-primary);
+    box-shadow: 0 0 0 1px var(--border);
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+  .color-dot:hover {
+    transform: scale(1.15);
+  }
+
+  .card-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: auto;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+
+  .card-actions .btn {
+    flex: 1;
+    justify-content: center;
+    padding: 8px 12px;
+    font-size: 0.8rem;
+  }
+
+  .empty-state {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-secondary);
+  }
+
+  .empty-state svg {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 16px;
+    opacity: 0.3;
+  }
+
+  /* ============================================
+     MODAL
+     ============================================ */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(6px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .modal-overlay.active {
+    display: flex;
+    opacity: 1;
+  }
+
+  .modal {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    width: 100%;
+    max-width: 680px;
+    max-height: 92vh;
+    overflow-y: auto;
+    box-shadow: var(--shadow-lg);
+    transform: translateY(20px) scale(0.98);
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .modal-overlay.active .modal {
+    transform: translateY(0) scale(1);
+  }
+
+  .modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    background: var(--bg-secondary);
+    z-index: 10;
+  }
+
+  .modal-header h2 {
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+
+  .modal-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: var(--transition);
+  }
+  .modal-close:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .modal-body {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* ============================================
+     FORMULARIO
+     ============================================ */
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .form-group label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .form-group input[type="text"],
+  .form-group input[type="color"] {
+    padding: 10px 14px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    transition: var(--transition);
+    width: 100%;
+  }
+
+  .form-group input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+  }
+
+  .form-group input:read-only {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .color-input-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .color-input-group input[type="color"] {
+    width: 44px;
+    height: 44px;
+    padding: 2px;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+  }
+
+  .color-input-group input[type="text"] {
+    flex: 1;
+    font-family: monospace;
+    text-transform: uppercase;
+  }
+
+  /* ============================================
+     DRAG & DROP
+     ============================================ */
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 32px 24px;
+    text-align: center;
+    transition: var(--transition);
+    cursor: pointer;
+    position: relative;
+    background: var(--bg-primary);
+  }
+
+  .drop-zone:hover {
+    border-color: var(--accent);
+    background: rgba(59,130,246,0.04);
+  }
+
+  .drop-zone.dragover {
+    border-color: var(--accent);
+    background: rgba(59,130,246,0.08);
+    transform: scale(1.01);
+  }
+
+  .drop-zone svg {
+    width: 48px;
+    height: 48px;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+    transition: var(--transition);
+  }
+
+  .drop-zone:hover svg,
+  .drop-zone.dragover svg {
+    color: var(--accent);
+  }
+
+  .drop-zone p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: 4px;
+  }
+
+  .drop-zone .hint {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    opacity: 0.7;
+  }
+
+  .drop-zone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* ============================================
+     PREVIEW
+     ============================================ */
+  .preview-area {
+    display: none;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .preview-area.active {
+    display: flex;
+  }
+
+  .preview-box {
+    width: 100%;
+    aspect-ratio: 16/9;
+    background: #000;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    position: relative;
+  }
+
+  .preview-box img,
+  .preview-box video {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+
+  .preview-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* ============================================
+     CUENTAGOTAS (solo PNG de LOGO)
+     ============================================ */
+  .eyedropper-section {
+    display: none;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+  }
+
+  .eyedropper-section.active {
+    display: flex;
+  }
+
+  .eyedropper-canvas-wrap {
+    position: relative;
+    width: 100%;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    border: 1px solid var(--border);
+    cursor: crosshair;
+    background: #000;
+  }
+
+  .eyedropper-canvas-wrap canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  .eyedropper-hint {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.7);
+    color: #fff;
+    font-size: 0.75rem;
+    padding: 4px 10px;
+    border-radius: 4px;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  .eyedropper-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .eyedropper-mode {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: var(--radius-sm);
+    border: 2px solid var(--border);
+    background: var(--bg-secondary);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: var(--transition);
+    color: var(--text-primary);
+  }
+
+  .eyedropper-mode.active {
+    border-color: var(--accent);
+    background: rgba(59,130,246,0.1);
+  }
+
+  .eyedropper-mode .dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.3);
+  }
+
+  /* ============================================
+     TOAST & NOTIFICACIONES
+     ============================================ */
+  .toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .toast {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: var(--radius-sm);
+    padding: 14px 18px;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    box-shadow: var(--shadow-lg);
+    animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s forwards;
+    max-width: 320px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .toast.success { border-left-color: var(--success); }
+  .toast.error { border-left-color: var(--danger); }
+  .toast.warning { border-left-color: var(--warning); }
+
+  @keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+
+  @keyframes fadeOut {
+    to { opacity: 0; transform: translateX(20px); }
+  }
+
+  /* ============================================
+     CONFIRM DIALOG
+     ============================================ */
+  .confirm-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(4px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100;
+    padding: 20px;
+  }
+
+  .confirm-overlay.active {
+    display: flex;
+  }
+
+  .confirm-box {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+    max-width: 400px;
+    width: 100%;
+    text-align: center;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .confirm-box h3 {
+    margin-bottom: 10px;
+    font-size: 1.2rem;
+  }
+
+  .confirm-box p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+  }
+
+  .confirm-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+  }
+
+  /* ============================================
+     RESPONSIVE
+     ============================================ */
+  @media (max-width: 640px) {
+    .header h1 { font-size: 1.5rem; }
+    .top-panel { flex-direction: column; align-items: stretch; }
+    .search-box { max-width: none; }
+    .form-row { grid-template-columns: 1fr; }
+    .teams-grid { grid-template-columns: 1fr; }
+    .btn-group { justify-content: stretch; }
+    .btn-group .btn { flex: 1; justify-content: center; }
+  }
+
+  @media (max-width: 400px) {
+    .container { padding: 14px; }
+    .modal-body { padding: 16px; }
+  }
+</style>
+<base target="_blank">
+</head>
+<body>
+
+<!-- HEADER -->
+<<header class="header">
+  <h1>TEAM MANAGER</h1>
+  <p>Base de datos de equipos, logos y banderas</p>
+</header>
+
+<div class="container">
+  <!-- PANEL SUPERIOR -->
+  <div class="top-panel">
+    <div class="btn-group">
+      <button class="btn" id="btnAddTeam" onclick="openModal()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        Agregar Equipo
+      </button>
+      <button class="btn btn-secondary" onclick="exportJSON()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        Exportar JSON
+      </button>
+      <button class="btn btn-secondary" onclick="document.getElementById('importFile').click()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+        Importar JSON
+      </button>
+      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSON(this)">
+      <button class="btn btn-danger" onclick="confirmClearDB()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        Limpiar Base de Datos
+      </button>
+    </div>
+
+    <div class="search-box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      <input type="text" id="searchInput" placeholder="Buscar por nombre, tag o teamID..." oninput="renderTeams()">
+    </div>
+  </div>
+
+  <!-- GRID DE EQUIPOS -->
+  <div class="teams-grid" id="teamsGrid"></div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModalOnBackdrop(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2 id="modalTitle">Agregar Equipo</h2>
+      <button class="modal-close" onclick="closeModal()" aria-label="Cerrar">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <form id="teamForm" onsubmit="event.preventDefault(); saveTeam();">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="teamId">Team ID (Auto)</label>
+            <input type="text" id="teamId" readonly placeholder="Generado automáticamente">
+          </div>
+          <div class="form-group">
+            <label for="teamName">Nombre completo *</label>
+            <input type="text" id="teamName" required placeholder="Ej: Team SoloMid">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="tag">TAG (Opcional)</label>
+          <input type="text" id="tag" placeholder="Ej: TSM" maxlength="10">
+        </div>
+
+        <!-- DRAG & DROP PNG (LOGO) -->
+        <div class="form-group">
+          <label>Logo PNG</label>
+          <div class="drop-zone" id="dropZonePng">
+            <input type="file" id="fileInputPng" accept="image/png" onchange="handleFileSelect(event)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            <p>Arrastra un PNG aquí</p>
+            <span class="hint">Click para seleccionar • Máx 5MB</span>
+          </div>
+        </div>
+
+        <!-- DRAG & DROP WEBM (LOGO) -->
+        <div class="form-group">
+          <label>Logo WEBM</label>
+          <div class="drop-zone" id="dropZoneWebm">
+            <input type="file" id="fileInputWebm" accept="video/webm" onchange="handleFileSelect(event)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            <p>Arrastra un WEBM aquí</p>
+            <span class="hint">Click para seleccionar • Máx 20MB</span>
+          </div>
+        </div>
+
+        <!-- PREVIEW LOGO -->
+        <div class="preview-area" id="previewArea">
+          <div class="preview-label" id="previewLabel"></div>
+          <div class="preview-box" id="previewBox"></div>
+        </div>
+
+        <!-- CUENTAGOTAS (solo PNG de LOGO) -->
+        <div class="eyedropper-section" id="eyedropperSection">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <label style="font-size:0.85rem; font-weight:600; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px;">Cuentagotas de color</label>
+            <button type="button" class="btn btn-secondary" style="padding:6px 12px; font-size:0.75rem;" onclick="autoExtractColors()">Auto extraer colores</button>
+          </div>
+          <div class="eyedropper-canvas-wrap" id="canvasWrap">
+            <canvas id="eyedropperCanvas"></canvas>
+            <span class="eyedropper-hint">Haz clic en la imagen para seleccionar el color activo</span>
+          </div>
+          <div class="eyedropper-actions">
+            <button type="button" class="eyedropper-mode primary-mode active" id="modePrimary" onclick="setEyedropperMode('primary')">
+              <span class="dot" id="dotPrimary" style="background:#3b82f6;"></span>
+              Color Primario
+            </button>
+            <button type="button" class="eyedropper-mode secondary-mode" id="modeSecondary" onclick="setEyedropperMode('secondary')">
+              <span class="dot" id="dotSecondary" style="background:#64748b;"></span>
+              Color Secundario
+            </button>
+          </div>
+        </div>
+
+        <!-- DRAG & DROP PNG (BANDERA) -->
+        <div class="form-group">
+          <label>Bandera PNG</label>
+          <div class="drop-zone" id="dropZoneFlagPng">
+            <input type="file" id="fileInputFlagPng" accept="image/png" onchange="handleFileSelect(event)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            <p>Arrastra un PNG de bandera aquí</p>
+            <span class="hint">Click para seleccionar • Máx 5MB</span>
+          </div>
+        </div>
+
+        <!-- DRAG & DROP WEBM (BANDERA) -->
+        <div class="form-group">
+          <label>Bandera WEBM</label>
+          <div class="drop-zone" id="dropZoneFlagWebm">
+            <input type="file" id="fileInputFlagWebm" accept="video/webm" onchange="handleFileSelect(event)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            <p>Arrastra un WEBM de bandera aquí</p>
+            <span class="hint">Click para seleccionar • Máx 20MB</span>
+          </div>
+        </div>
+
+        <!-- PREVIEW BANDERA -->
+        <div class="preview-area" id="previewAreaFlag">
+          <div class="preview-label" id="previewLabelFlag"></div>
+          <div class="preview-box" id="previewBoxFlag"></div>
+        </div>
+
+        <!-- COLORES -->
+        <div class="form-row">
+          <div class="form-group">
+            <label>Color Primario</label>
+            <div class="color-input-group">
+              <input type="color" id="primaryColor" value="#3b82f6" onchange="syncHexFromPicker('primary')">
+              <input type="text" id="primaryHex" value="#3B82F6" maxlength="7" oninput="syncPickerFromHex('primary')">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Color Secundario</label>
+            <div class="color-input-group">
+              <input type="color" id="secondaryColor" value="#64748b" onchange="syncHexFromPicker('secondary')">
+              <input type="text" id="secondaryHex" value="#64748B" maxlength="7" oninput="syncPickerFromHex('secondary')">
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-top:8px;">
+          <button type="submit" class="btn btn-success" style="flex:1;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            Guardar Equipo
+          </button>
+          <button type="button" class="btn btn-secondary" style="flex:1;" onclick="closeModal()">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM DIALOG -->
+<div class="confirm-overlay" id="confirmOverlay" onclick="if(event.target===this) closeConfirm()">
+  <div class="confirm-box">
+    <h3 id="confirmTitle">¿Estás seguro?</h3>
+    <p id="confirmMessage">Esta acción no se puede deshacer.</p>
+    <div class="confirm-actions">
+      <button class="btn btn-danger" id="confirmBtnYes">Sí, continuar</button>
+      <button class="btn btn-secondary" onclick="closeConfirm()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="app.js"></script>
+
+<!-- ======================================================
+     OPTIMIZACIÓN CPU/GPU WEBM – Hover Play / No Autoplay
+     ====================================================== -->
+<script>
+(function(){
+  'use strict';
+
+  function setupVideoHover(video){
+    if(!video || video.dataset.hoverPlay === '1') return;
+    video.dataset.hoverPlay = '1';
+
+    // 1. Eliminar autoplay absoluto (atributo y propiedad)
+    video.autoplay = false;
+    video.removeAttribute('autoplay');
+
+    // 2. Preload liviano: metadata carga solo metadatos + primer frame.
+    //    Esto mantiene el diseño visual intacto (no se ve negro) sin consumir
+    //    recursos de decodificación continua.
+    if(!video.hasAttribute('preload') || video.getAttribute('preload') === 'auto'){
+      video.preload = 'metadata';
+    }
+
+    // 3. Estado inicial: detenido y al inicio
+    video.pause();
+    try{ video.currentTime = 0; }catch(e){}
+
+    // 4. El área de hover es el contenedor padre (mejor UX) o el video mismo
+    var hoverTarget = video.closest('.card-logo-wrap, .card-flag-wrap, .preview-box, .team-card') || video;
+
+    var onEnter = function(){
+      // Si por alguna razón sigue en 'none', forzar metadata antes de reproducir
+      if(video.preload === 'none'){
+        video.preload = 'metadata';
+        video.load();
+      }
+      var p = video.play();
+      if(p && typeof p.catch === 'function') p.catch(function(){});
+    };
+
+    var onLeave = function(){
+      video.pause();
+      try{ video.currentTime = 0; }catch(e){}
+    };
+
+    hoverTarget.addEventListener('mouseenter', onEnter);
+    hoverTarget.addEventListener('mouseleave', onLeave);
+  }
+
+  function scanVideos(root){
+    if(!root) return;
+    var videos = root.querySelectorAll ? root.querySelectorAll('video') : [];
+    videos.forEach(setupVideoHover);
+  }
+
+  // Aplicar a videos ya presentes en el DOM (previews, etc.)
+  scanVideos(document);
+
+  // MutationObserver: captura videos inyectados dinámicamente por renderTeams(),
+  // drag & drop, modal previews, importación de JSON, etc.
+  var observer = new MutationObserver(function(mutations){
+    mutations.forEach(function(mutation){
+      mutation.addedNodes.forEach(function(node){
+        if(node.nodeType === 1){
+          if(node.tagName === 'VIDEO'){
+            setupVideoHover(node);
+          }else if(typeof node.querySelectorAll === 'function'){
+            node.querySelectorAll('video').forEach(setupVideoHover);
+          }
+        }
+      });
+    });
+  });
+
+  observer.observe(document.body, { childList: true, subtree: true });
+
+  // API global para re-aplicar manualmente tras innerHTML masivo si fuera necesario
+  window.optimizeVideoHover = function(){ scanVideos(document); };
+})();
+</script>
+
+</body>
+</html>
