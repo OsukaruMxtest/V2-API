@@ -492,7 +492,8 @@ function resolveMedia(path) {
     path.startsWith('blob:') ||
     path.startsWith('data:') ||
     path.startsWith('http://') ||
-    path.startsWith('https://')
+    path.startsWith('https://') ||
+    path.startsWith('//')
   ) {
     return path;
   }
@@ -503,20 +504,27 @@ function resolveMedia(path) {
 }
 
 async function safeJsonResponse(res, fallbackMsg) {
-  let json = null;
+  var text = null;
   try {
-    json = await res.json();
+    text = await res.text();
   } catch (err) {
-    if (!res.ok) {
-      throw new Error(fallbackMsg);
-    }
+    throw new Error(fallbackMsg || 'Error leyendo respuesta');
+  }
+  if (res.status === 204 || !text || text.trim() === '') {
     return {};
+  }
+  var json = null;
+  try {
+    json = JSON.parse(text);
+  } catch (err) {
+    throw new Error(fallbackMsg || 'Respuesta inválida del servidor');
   }
   if (!res.ok) {
     throw new Error(
       json?.error ||
       json?.message ||
-      fallbackMsg
+      fallbackMsg ||
+      'Error del servidor'
     );
   }
   return json || {};
@@ -527,18 +535,26 @@ async function safeFetch(url, options, fallbackMsg) {
     if (!HAS_APP_CONFIG) {
       showToast('APP_CONFIG no disponible. Verifica que shared/app_config.js cargue antes que event_package_builder.html', 'error');
     }
-    throw new Error('Endpoint inválido');
+    throw new Error('Endpoint inválido o no configurado');
   }
   try {
-    return await fetch(url, options);
+    var res = await fetch(url, options);
+    if (!res.ok) {
+      var statusText = res.status + ' ' + (res.statusText || '');
+      throw new Error((fallbackMsg || 'Error HTTP') + ' (' + statusText + ')');
+    }
+    return res;
   } catch (err) {
     console.error(err);
-    const msg = (
+    if (err.message && (err.message.includes('HTTP') || err.message.includes('Endpoint'))) {
+      throw err;
+    }
+    var msg = (
       err?.message?.includes('Failed to fetch') ||
       err?.message?.includes('NetworkError')
     )
       ? 'No se pudo conectar con el servidor. Railway puede estar dormido u offline.'
-      : fallbackMsg;
+      : (fallbackMsg || 'Error de conexión');
     throw new Error(msg);
   }
 }
@@ -719,7 +735,7 @@ function renderTeamsList() {
   var list = $('teamsList');
   var query = ($('searchTeams').value || '').trim().toLowerCase();
   filteredTeams = allTeams.filter(function(t) {
-    if (!t.logoPng) return false;
+    if (!t.logoPng && !t.logoWebm) return false;
     if (isTeamUsed(t.id)) return false;
     return (t.teamName || '').toLowerCase().indexOf(query) >= 0 ||
            (t.tag || '').toLowerCase().indexOf(query) >= 0 ||
@@ -732,11 +748,11 @@ function renderTeamsList() {
   }
   list.innerHTML = filteredTeams.map(function(t) {
     var hasPng = !!t.logoPng;
-    return '<div class="team-item' + (!hasPng ? ' disabled' : '') + '" draggable="' + hasPng + '" data-id="' + t.id + '" ondragstart="handleDragStart(event,'' + t.id + '')" ondragend="handleDragEnd(event)"' + (!hasPng ? '' : ' onclick="addToFirstSlot('' + t.id + '')"') + '>' +
+    return '<div class="team-item' + (!hasPng ? ' disabled' : '') + '" draggable="' + hasPng + '" data-id="' + t.id + '" ondragstart="handleDragStart(event,'' + t.id + '')" ondragend="handleDragEnd(event)"' + (!hasPng ? '' : ' onclick="addToFirstSlot(\'' + t.id + '\')"') + '>' +
       '<img class="item-logo" src="' + (t.logoPng || t.logoWebm || '') + '" alt="" onerror="this.style.display='none'">' +
       '<div class="item-info"><div class="item-name">' + escapeHtml(t.teamName) + '</div><div class="item-tag">' + escapeHtml(t.teamId) + (t.tag ? ' | ' + escapeHtml(t.tag) : '') + '</div></div>' +
       '<div class="item-colors"><div class="dot" style="background:' + (t.primaryColor || '#3b82f6') + '"></div><div class="dot" style="background:' + (t.secondaryColor || '#64748b') + '"></div></div>' +
-      (hasPng ? '<button class="add-btn" onclick="event.stopPropagation();addToFirstSlot('' + t.id + '')">+</button>' : '') +
+      (hasPng ? '<button class="add-btn" onclick="event.stopPropagation();addToFirstSlot(\\\'' + t.id + '\\\')">+</button>' : '') +
       '</div>';
   }).join('');
   updateStats();
@@ -815,7 +831,7 @@ function toggleLock(index) {
 
 function addToFirstSlot(teamId) {
   var team = allTeams.find(function(t) { return t.id === teamId; });
-  if (!team || !team.logoPng) { showToast('Equipo no compatible (sin PNG)', 'error'); return; }
+  if (!team || (!team.logoPng && !team.logoWebm)) { showToast('Equipo no compatible (sin logo)', 'error'); return; }
   var emptyIndex = slots.findIndex(function(s, i) { return s === null && !lockedSlots.has(i); });
   if (emptyIndex === -1) { showToast('No hay slots disponibles (max 50)', 'error'); return; }
   slots[emptyIndex] = team;
@@ -914,7 +930,7 @@ function saveSlotColors() {
    ============================================ */
 function handleDragStart(e, teamId) {
   var team = allTeams.find(function(t) { return t.id === teamId; });
-  if (!team || !team.logoPng || isTeamUsed(teamId)) { e.preventDefault(); return; }
+  if (!team || (!team.logoPng && !team.logoWebm) || isTeamUsed(teamId)) { e.preventDefault(); return; }
   draggedTeam = team;
   e.target.classList.add('dragging');
   e.dataTransfer.effectAllowed = 'copy';
@@ -1001,6 +1017,7 @@ async function resizeImage(srcUrl, size) {
   return new Promise(function(resolve, reject) {
     var img = new Image();
     img.crossOrigin = 'anonymous';
+    // Nota: Railway debe exponer Access-Control-Allow-Origin: * para /logos
     img.onload = function() {
       var canvas = document.createElement('canvas');
       canvas.width = size; canvas.height = size;
@@ -1120,7 +1137,7 @@ function validateEventPackage(name) {
     var key = t.teamId || t.id;
     if (seen[key]) errors.push('Equipo duplicado detectado: ' + key);
     seen[key] = true;
-    if (!t.logoPng) errors.push('El equipo en slot ' + (used[u] + 1) + ' no tiene logo PNG');
+    if (!t.logoPng && !t.logoWebm) errors.push('El equipo en slot ' + (used[u] + 1) + ' no tiene logo');
   }
   return errors;
 }
@@ -1128,6 +1145,7 @@ function validateEventPackage(name) {
 /* Construye el payload para enviar al servidor */
 function buildEventPackagePayload() {
   var slotsData = [];
+  var slotsOrder = [];
   for (var i = 0; i < 50; i++) {
     if (slots[i] !== null) {
       var team = slots[i];
@@ -1142,12 +1160,16 @@ function buildEventPackagePayload() {
         primaryColor: getSlotPrimaryColor(i),
         secondaryColor: getSlotColor(i, 'secondary')
       });
+      slotsOrder.push({
+        slot: i + 1,
+        teamId: team.teamId
+      });
     }
   }
   return {
     eventName: getEventName(),
     eventDate: $('evtDate').value || new Date().toISOString().split('T')[0],
-    slots: slotsData.map(function(team, idx) { return { teamId: team.teamId }; }),
+    slots: slotsOrder,
     teams: slotsData
   };
 }
@@ -1180,7 +1202,13 @@ async function generateEventPackage() {
 
     if (!response.ok) {
       var errorText = await response.text();
-      throw new Error(errorText || 'Error ' + response.status);
+      var errorMsg = errorText || 'Error ' + response.status;
+      try {
+        var errorJson = JSON.parse(errorText);
+        if (errorJson.error) errorMsg = errorJson.error;
+        else if (errorJson.message) errorMsg = errorJson.message;
+      } catch (e) {}
+      throw new Error(errorMsg);
     }
 
     var blob = await response.blob();
