@@ -323,12 +323,10 @@ body {
 }
 </style>
 <base target="_blank">
-<base target="_blank">
-<base target="_blank">
 </head>
 <body>
 
-<<header class="header">
+<header class="header">
   <h1>PLAYER MANAGER</h1>
   <p>Base de datos de jugadores competitivos / esports</p>
 </header>
@@ -515,13 +513,22 @@ body {
 
 <div class="toast-container" id="toastContainer"></div>
 
+
 <script src="../shared/app_config.js"></script>
 <script>
 (function(){
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const API_BASE = '';
+  const HAS_APP_CONFIG = typeof window !== 'undefined' && window.APP_CONFIG && typeof window.APP_CONFIG === 'object';
+  const API = HAS_APP_CONFIG ? window.APP_CONFIG : null;
+  function resolveMedia(path) {
+    if (!path || typeof path !== 'string') return '';
+    if (path.startsWith('blob:') || path.startsWith('data:') || path.startsWith('http://') || path.startsWith('https://')) return path;
+    if (!HAS_APP_CONFIG || typeof API.resolveAsset !== 'function') return path;
+    return API.resolveAsset(path, true);
+  }
+
 
   let allPlayers = [];
   let editingId = null;
@@ -546,8 +553,8 @@ body {
 
   function escapeHtml(str) {
     if(typeof str !== 'string') return '';
-    return str.replace(/[&<<>"']/g, function(m){
-      return ({'&':'&amp;','<<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m];
+    return str.replace(/[&<>"']/g, function(m){
+      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m];
     });
   }
 
@@ -572,7 +579,8 @@ body {
   }
 
   async function apiGetPlayers() {
-    const res = await fetch(API_BASE + '/api/players');
+    if (!HAS_APP_CONFIG) throw new Error('APP_CONFIG no disponible. Verifica que shared/app_config.js cargue antes.');
+    const res = await fetch(API.resolveEndpoint('players'));
     if(!res.ok) throw new Error('Error cargando jugadores');
     const json = await res.json();
     if(!json.success) throw new Error(json.error || 'Error cargando jugadores');
@@ -580,7 +588,7 @@ body {
   }
 
   async function apiCreatePlayer(body) {
-    const res = await fetch(API_BASE + '/api/players', {
+    const res = await fetch(API.resolveEndpoint('players'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
@@ -593,7 +601,7 @@ body {
   }
 
   async function apiUpdatePlayer(id, body) {
-    const res = await fetch(API_BASE + '/api/players/' + id, {
+    const res = await fetch(API.resolveEndpoint('players') + '/' + id, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
@@ -606,7 +614,7 @@ body {
   }
 
   async function apiDeletePlayer(id) {
-    const res = await fetch(API_BASE + '/api/players/' + id, { method: 'DELETE' });
+    const res = await fetch(API.resolveEndpoint('players') + '/' + id, { method: 'DELETE' });
     if(!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Error eliminando jugador');
@@ -619,7 +627,7 @@ body {
     form.append('uid', uid);
     form.append('entityType', 'player');
     form.append('logo', file);
-    const res = await fetch(API_BASE + '/api/upload-player', {
+    const res = await fetch(API.resolveEndpoint('uploadPlayer'), {
       method: 'POST',
       body: form
     });
@@ -632,7 +640,8 @@ body {
   }
 
   async function apiExportPlayers() {
-    const res = await fetch(API_BASE + '/api/players');
+    if (!HAS_APP_CONFIG) throw new Error('APP_CONFIG no disponible. Verifica que shared/app_config.js cargue antes.');
+    const res = await fetch(API.resolveEndpoint('players'));
     if(!res.ok) throw new Error('Error exportando');
     const json = await res.json();
     if(!json.success) throw new Error(json.error || 'Error exportando');
@@ -640,7 +649,7 @@ body {
   }
 
   async function apiBatchImport(players) {
-    const res = await fetch(API_BASE + '/api/players/batch', {
+    const res = await fetch(API.resolveEndpoint('playersBatch'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(players)
@@ -686,7 +695,7 @@ body {
       card.className = 'player-card';
       card.dataset.id = p.id;
 
-      var logoSrc = p.logo || '/logos/default.png';
+      var logoSrc = p.logo ? resolveMedia(p.logo) : resolveMedia('/logos/default.png');
       var logoType = p.logoType || getLogoType(p.logo);
       var mediaHtml = '';
 
@@ -765,7 +774,29 @@ body {
   }
 
   function setupEvents() {
-    $('playersGrid').addEventListener('click', function(e) {
+    var playersGrid = $('playersGrid');
+    var btnAddPlayer = $('btnAddPlayer');
+    var btnExport = $('btnExport');
+    var btnImportTrigger = $('btnImportTrigger');
+    var importFile = $('importFile');
+    var btnImportCSVTrigger = $('btnImportCSVTrigger');
+    var importCSVFile = $('importCSVFile');
+    var btnClearDB = $('btnClearDB');
+    var modalClose = $('modalClose');
+    var btnCancel = $('btnCancel');
+    var modalOverlay = $('modalOverlay');
+    var playerForm = $('playerForm');
+    var btnRemoveLogo = $('btnRemoveLogo');
+    var searchInput = $('searchInput');
+    var confirmBtnYes = $('confirmBtnYes');
+    var confirmBtnNo = $('confirmBtnNo');
+    var confirmOverlay = $('confirmOverlay');
+    var btnCloseDuplicate = $('btnCloseDuplicate');
+    var duplicateOverlay = $('duplicateOverlay');
+    var btnCloseImportSummary = $('btnCloseImportSummary');
+    var importSummaryOverlay = $('importSummaryOverlay');
+
+    if(playersGrid) playersGrid.addEventListener('click', function(e) {
       var btn = e.target.closest('button[data-action]');
       if(!btn) return;
       var action = btn.dataset.action;
@@ -774,31 +805,31 @@ body {
       else if(action === 'delete') deletePlayer(id);
     });
 
-    $('btnAddPlayer').addEventListener('click', function() { openModal(); });
-    $('btnExport').addEventListener('click', exportJSON);
-    $('btnImportTrigger').addEventListener('click', function() { $('importFile').click(); });
-    $('importFile').addEventListener('change', function(e) { importJSON(e.target); });
-    $('btnImportCSVTrigger').addEventListener('click', function() { $('importCSVFile').click(); });
-    $('importCSVFile').addEventListener('change', function(e) { importCSV(e.target); });
-    $('btnClearDB').addEventListener('click', confirmClearDB);
+    if(btnAddPlayer) btnAddPlayer.addEventListener('click', function() { openModal(); });
+    if(btnExport) btnExport.addEventListener('click', exportJSON);
+    if(btnImportTrigger && importFile) btnImportTrigger.addEventListener('click', function() { importFile.click(); });
+    if(importFile) importFile.addEventListener('change', function(e) { importJSON(e.target); });
+    if(btnImportCSVTrigger && importCSVFile) btnImportCSVTrigger.addEventListener('click', function() { importCSVFile.click(); });
+    if(importCSVFile) importCSVFile.addEventListener('change', function(e) { importCSV(e.target); });
+    if(btnClearDB) btnClearDB.addEventListener('click', confirmClearDB);
 
-    $('modalClose').addEventListener('click', closeModal);
-    $('btnCancel').addEventListener('click', closeModal);
-    $('modalOverlay').addEventListener('click', function(e) { if(e.target === $('modalOverlay')) closeModal(); });
-    $('playerForm').addEventListener('submit', savePlayer);
-    $('btnRemoveLogo').addEventListener('click', resetFiles);
+    if(modalClose) modalClose.addEventListener('click', closeModal);
+    if(btnCancel) btnCancel.addEventListener('click', closeModal);
+    if(modalOverlay) modalOverlay.addEventListener('click', function(e) { if(e.target === modalOverlay) closeModal(); });
+    if(playerForm) playerForm.addEventListener('submit', savePlayer);
+    if(btnRemoveLogo) btnRemoveLogo.addEventListener('click', resetFiles);
 
-    $('searchInput').addEventListener('input', renderPlayers);
+    if(searchInput) searchInput.addEventListener('input', renderPlayers);
 
-    $('confirmBtnYes').addEventListener('click', function() { if(confirmCallback) confirmCallback(); closeConfirm(); });
-    $('confirmBtnNo').addEventListener('click', closeConfirm);
-    $('confirmOverlay').addEventListener('click', function(e) { if(e.target === $('confirmOverlay')) closeConfirm(); });
+    if(confirmBtnYes) confirmBtnYes.addEventListener('click', function() { if(confirmCallback) confirmCallback(); closeConfirm(); });
+    if(confirmBtnNo) confirmBtnNo.addEventListener('click', closeConfirm);
+    if(confirmOverlay) confirmOverlay.addEventListener('click', function(e) { if(e.target === confirmOverlay) closeConfirm(); });
 
-    $('btnCloseDuplicate').addEventListener('click', function() { $('duplicateOverlay').classList.remove('active'); });
-    $('duplicateOverlay').addEventListener('click', function(e) { if(e.target === $('duplicateOverlay')) $('duplicateOverlay').classList.remove('active'); });
+    if(btnCloseDuplicate && duplicateOverlay) btnCloseDuplicate.addEventListener('click', function() { duplicateOverlay.classList.remove('active'); });
+    if(duplicateOverlay) duplicateOverlay.addEventListener('click', function(e) { if(e.target === duplicateOverlay) duplicateOverlay.classList.remove('active'); });
 
-    $('btnCloseImportSummary').addEventListener('click', function() { $('importSummaryOverlay').classList.remove('active'); });
-    $('importSummaryOverlay').addEventListener('click', function(e) { if(e.target === $('importSummaryOverlay')) $('importSummaryOverlay').classList.remove('active'); });
+    if(btnCloseImportSummary && importSummaryOverlay) btnCloseImportSummary.addEventListener('click', function() { importSummaryOverlay.classList.remove('active'); });
+    if(importSummaryOverlay) importSummaryOverlay.addEventListener('click', function(e) { if(e.target === importSummaryOverlay) importSummaryOverlay.classList.remove('active'); });
   }
 
   function openModal(id) {
@@ -865,7 +896,7 @@ body {
     if(type === 'webm') {
       box.innerHTML = '<video src="' + escapeHtml(dataUrl) + '" muted loop playsinline preload="metadata" style="max-width:100%;max-height:100%;object-fit:contain;"></video>';
     } else {
-      box.innerHTML = '<img src="' + escapeHtml(dataUrl) + '" alt="" onerror="this.src=\'/logos/default.png\'" style="max-width:100%;max-height:100%;object-fit:contain;">';
+      box.innerHTML = '<img src="' + escapeHtml(dataUrl) + '" alt="" onerror="this.src=\'' + escapeHtml(resolveMedia('/logos/default.png')) + '\'" style="max-width:100%;max-height:100%;object-fit:contain;">';
     }
     setupVideoHover(box);
   }
@@ -990,7 +1021,7 @@ body {
     var overlay = $('duplicateOverlay');
     var container = $('duplicatePlayerContent');
 
-    var dupLogo = existing.logo || '/logos/default.png';
+    var dupLogo = existing.logo ? resolveMedia(existing.logo) : resolveMedia('/logos/default.png');
     var dupLogoType = existing.logoType || getLogoType(existing.logo);
     var media = '';
     if(dupLogoType === 'webm') {
@@ -1259,6 +1290,10 @@ body {
   }
 
   function init() {
+    if (!HAS_APP_CONFIG) {
+      showToast('APP_CONFIG no disponible. Verifica que shared/app_config.js cargue antes que este script.', 'error');
+      return;
+    }
     initDragDrop();
     setupEvents();
     loadAllPlayers();
