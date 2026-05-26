@@ -170,9 +170,15 @@
         }
         .col-hidden {
             display: none !important;
+            width: 0 !important;
+            min-width: 0 !important;
+            max-width: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            overflow: hidden !important;
         }
         .col-visible {
-            display: flex;
+            display: flex !important;
         }
 
         @keyframes slideInRight {
@@ -622,6 +628,7 @@
             font-weight: bold;
         }
     </style>
+<base target="_blank">
 </head>
 <body>
     <div class="overlay-content" id="mainOverlay">
@@ -798,6 +805,33 @@
             let lastHiddenSnapshot = null;
 
             let externalVisible = true;
+            let currentPanelIndex = 0;
+            let panelStartTime = 0;
+
+            function resetPanelPagination() {
+                currentPanelIndex = 0;
+                panelStartTime = 0;
+            }
+
+            function showOverlayElement() {
+                const mainOverlay = document.getElementById('main-overlay');
+                if (mainOverlay) {
+                    mainOverlay.style.visibility = 'visible';
+                    mainOverlay.style.opacity = '1';
+                }
+            }
+
+            function hideOverlayElement() {
+                const mainOverlay = document.getElementById('main-overlay');
+                if (mainOverlay) {
+                    mainOverlay.style.opacity = '0';
+                    setTimeout(() => {
+                        if (currentState === OverlayState.HIDDEN && !externalVisible) {
+                            mainOverlay.style.visibility = 'hidden';
+                        }
+                    }, 500);
+                }
+            }
             let lastAliveCount = 16;
             let lastRenderedGameID = null;
             let previousAliveCountForPulse = -1;
@@ -820,6 +854,11 @@
             } catch (e) { console.error('[barras] BroadcastChannel error', e); }
             try {
                 commandChannel = new BroadcastChannel('pubgm_commands');
+                commandChannel.onmessage = (event) => {
+                    if (event.data && (event.data.cmd || event.data.command)) {
+                        handleOverlayCommand(event.data);
+                    }
+                };
             } catch (e) { console.error('[barras] commandChannel error', e); }
 
             function updateUtilities(container, utilities) {
@@ -1013,7 +1052,9 @@
             }
 
             function animateTableShow(onDone) {
+                if (isAnimating) return;
                 const mainOverlay = document.getElementById('mainOverlay');
+                if (mainOverlay && mainOverlay.style.visibility === 'visible' && mainOverlay.style.opacity === '1') return;
                 const header = document.getElementById('tableHeader');
                 const nom = document.querySelector('.nomenclatura-centrada');
                 const bodyRows = Array.from(document.querySelectorAll('#tableBody .t-row'));
@@ -1195,7 +1236,7 @@
                         _prevTableVisible = false;
                         animateTableHide();
                     } else {
-                        mainOverlay.style.visibility = 'hidden';
+                        hideOverlayElement();
                     }
                 };
 
@@ -1253,6 +1294,11 @@
                     CURRENT_SNAPSHOT = lastHiddenSnapshot;
                     scheduleRender();
                 }
+                if (visible) {
+                    showOverlayElement();
+                } else {
+                    hideOverlayElement();
+                }
                 applyVisibility();
             }
 
@@ -1288,21 +1334,13 @@
                     if (e.key === 'overlay_manual_cmd' && e.newValue) {
                         try {
                             const payload = JSON.parse(e.newValue);
-                            if (payload.command === 'hideAll') setVisible(false);
-                            if (payload.command === 'show_overlay') setVisible(true);
-                            if (payload.command === 'set_display_mode' && payload.mode) {
-                                const m = payload.mode === 'individual' ? 'individual' : 'team';
-                                window.OverlayConfig?.set({ display: { displayMode: m } });
+                            if (payload && payload.command) {
+                                handleOverlayCommand(payload);
                             }
-                            if (payload.command === 'display_mode_individual') {
-                                window.OverlayConfig?.set({ display: { displayMode: 'individual' } });
-                            }
-                            if (payload.command === 'display_mode_team') {
-                                window.OverlayConfig?.set({ display: { displayMode: 'team' } });
-                            }
-                        } catch (err) {}
+                        } catch (err) {
+                            console.error('Error processing storage event:', err);
+                        }
                     }
-
                     if (e.key === 'overlay_config_update' && e.newValue) {
                         try {
                             const upd = JSON.parse(e.newValue);
@@ -1356,12 +1394,7 @@
                         handleOverlayCommand(data);
                     }
                     if (commandChannel?.postMessage) {
-                        const rebroadcastPayload = { type: 'command', cmd: data.cmd || data.command, timestamp: data.timestamp };
-                        if ((data.cmd === 'set_display_mode' || data.command === 'set_display_mode') && data.mode) {
-                            rebroadcastPayload.mode = data.mode === 'individual' ? 'individual' : 'team';
-                            rebroadcastPayload.command = data.cmd || data.command;
-                        }
-                        commandChannel.postMessage(rebroadcastPayload);
+                        commandChannel.postMessage(JSON.parse(JSON.stringify(data)));
                     }
                 } catch (e) {
                     logError('Error en comando overlay:', e);
@@ -1390,10 +1423,10 @@
                         if (window.OverlayConfig) {
                             window.OverlayConfig.set({ tables: { teamBars: true } });
                         }
-                        if (currentState === OverlayState.HIDDEN) {
-                            currentState = OverlayState.TABLE;
-                        }
-                        setVisible(true);
+                        currentState = OverlayState.TABLE;
+                        externalVisible = true;
+                        applyVisibility();
+                        scheduleRender();
                         break;
                     case 'reset_state':
                         currentState = OverlayState.TABLE;
@@ -1408,20 +1441,26 @@
                         scheduleRender();
                         break;
                     case 'display_mode_individual':
+                        CURRENT_MODE = 'individual';
+                        resetPanelPagination();
                         window.OverlayConfig?.set({ display: { displayMode: 'individual' } });
                         applyVisibility();
-                        if (CURRENT_SNAPSHOT && !renderScheduled) scheduleRender();
+                        scheduleRender();
                         break;
                     case 'display_mode_team':
+                        CURRENT_MODE = 'team';
+                        resetPanelPagination();
                         window.OverlayConfig?.set({ display: { displayMode: 'team' } });
                         applyVisibility();
-                        if (CURRENT_SNAPSHOT && !renderScheduled) scheduleRender();
+                        scheduleRender();
                         break;
                     case 'set_display_mode':
                         if (payload.mode) {
+                            CURRENT_MODE = payload.mode === 'individual' ? 'individual' : 'team';
+                            resetPanelPagination();
                             window.OverlayConfig?.set({ display: { displayMode: payload.mode } });
                             applyVisibility();
-                            if (CURRENT_SNAPSHOT && !renderScheduled) scheduleRender();
+                            scheduleRender();
                         }
                         break;
                     case 'col_pp_on':
@@ -1664,6 +1703,7 @@
 
             function scheduleRender() {
                 if (renderScheduled) return;
+                if (currentState === OverlayState.HIDDEN && !externalVisible) return;
                 renderScheduled = true;
                 requestAnimationFrame(() => {
                     renderScheduled = false;
@@ -1700,7 +1740,13 @@
                 });
             }
 
+            let lastReorderMode = '';
+            let lastReorderGridColumns = '';
             function animateReorder(tableBody, orderedTeamIds) {
+                const mode = CURRENT_MODE;
+                const grid = document.getElementById('stats-grid');
+                const gridColumns = grid ? (grid.dataset.columns || 'all') : 'all';
+
                 if (lastOrderedTeamIds.length === orderedTeamIds.length) {
                     let same = true;
                     for (let i = 0; i < orderedTeamIds.length; i++) {
@@ -1709,9 +1755,11 @@
                             break;
                         }
                     }
-                    if (same) return;
+                    if (same && mode === lastReorderMode && gridColumns === lastReorderGridColumns) return;
                 }
                 lastOrderedTeamIds = [...orderedTeamIds];
+                lastReorderMode = mode;
+                lastReorderGridColumns = gridColumns;
 
                 const rows = Array.from(tableBody.children);
                 const firstPositions = new Map();
@@ -1894,10 +1942,18 @@
                 applyColumnVisibility();
             }
 
+            let lastGridValue = '';
+            let lastColumnPP = true;
+            let lastColumnTotal = true;
             function applyColumnVisibility() {
                 const cfg = window.OverlayConfig?.get?.() || {};
                 const showPP = cfg.columns?.showPP ?? true;
                 const showTotal = cfg.columns?.showTotal ?? true;
+
+                const cacheKey = showPP + '|' + showTotal;
+                if (cacheKey === lastColumnPP + '|' + lastColumnTotal && lastGridValue) return;
+                lastColumnPP = showPP;
+                lastColumnTotal = showTotal;
 
                 const ppCells = document.querySelectorAll('.col-pp');
                 const totalCells = document.querySelectorAll('.col-total');
@@ -1943,6 +1999,8 @@
                     columns.push('72px');
                 }
                 const gridVal = columns.join(' ');
+                if (gridVal === lastGridValue) return;
+                lastGridValue = gridVal;
 
                 const header = document.getElementById('tableHeader');
                 if (header) header.style.gridTemplateColumns = gridVal;
@@ -2385,7 +2443,12 @@
 
             if (!window.__overlayCommandPollingStarted) {
                 window.__overlayCommandPollingStarted = true;
-                setInterval(pollOverlayCommands, 1000);
+                (async function pollLoop() {
+                    while (true) {
+                        await pollOverlayCommands();
+                        await new Promise(r => setTimeout(r, 1000));
+                    }
+                })();
             }
 
             initExternalControl();
