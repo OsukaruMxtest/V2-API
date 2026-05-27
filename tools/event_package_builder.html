@@ -274,7 +274,6 @@ color:var(--text-secondary);display:flex;align-items:center;gap:6px
 .btn-purple{background:var(--locked);color:#fff}
 .btn-purple:hover{background:#6d28d9;box-shadow:0 4px 12px rgba(124,58,237,0.3)}
 </style>
-<base target="_blank">
 </head>
 <body>
 
@@ -747,12 +746,12 @@ function renderTeamsList() {
     return;
   }
   list.innerHTML = filteredTeams.map(function(t) {
-    var hasPng = !!t.logoPng;
-    return '<div class="team-item' + (!hasPng ? ' disabled' : '') + '" draggable="' + hasPng + '" data-id="' + t.id + '" ondragstart="handleDragStart(event,'' + t.id + '')" ondragend="handleDragEnd(event)"' + (!hasPng ? '' : ' onclick="addToFirstSlot(\'' + t.id + '\')"') + '>' +
-      '<img class="item-logo" src="' + (t.logoPng || t.logoWebm || '') + '" alt="" onerror="this.style.display='none'">' +
+    var hasLogo = !!(t.logoPng || t.logoWebm);
+    return '<div class="team-item' + (!hasLogo ? ' disabled' : '') + '" draggable="' + hasLogo + '" data-id="' + t.id + '" ondragstart="handleDragStart(event,\'' + t.id + '\')" ondragend="handleDragEnd(event)"' + (!hasLogo ? '' : ' onclick="addToFirstSlot(\'' + t.id + '\')"') + '>' +
+      '<img class="item-logo" src="' + (t.logoPng || t.logoWebm || '') + '" alt="" onerror="this.style.display=\'none\'">' +
       '<div class="item-info"><div class="item-name">' + escapeHtml(t.teamName) + '</div><div class="item-tag">' + escapeHtml(t.teamId) + (t.tag ? ' | ' + escapeHtml(t.tag) : '') + '</div></div>' +
       '<div class="item-colors"><div class="dot" style="background:' + (t.primaryColor || '#3b82f6') + '"></div><div class="dot" style="background:' + (t.secondaryColor || '#64748b') + '"></div></div>' +
-      (hasPng ? '<button class="add-btn" onclick="event.stopPropagation();addToFirstSlot(\\\'' + t.id + '\\\')">+</button>' : '') +
+      (hasLogo ? '<button class="add-btn" onclick="event.stopPropagation();addToFirstSlot(\'' + t.id + '\')">+</button>' : '') +
       '</div>';
   }).join('');
   updateStats();
@@ -800,12 +799,12 @@ function renderSlots() {
       var primaryRing = activeType === 'primary' ? '0 0 0 3px var(--accent)' : '0 0 0 1px var(--border)';
       var secondaryRing = activeType === 'secondary' ? '0 0 0 3px var(--accent)' : '0 0 0 1px var(--border)';
       slotEl.innerHTML = '<span class="slot-number">' + padSlot(slotNum) + '</span>' +
-        '<img class="slot-logo" src="' + team.logoPng + '" alt="" onerror="this.style.display='none'">' +
+        '<img class="slot-logo" src="' + team.logoPng + '" alt="" onerror="this.style.display=\'none\'">' +
         '<div class="slot-name" style="background:' + activeColor + ';color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.6);">' + escapeHtml(team.teamName) + '</div>' +
         '<div class="slot-tag">' + escapeHtml(generateTag(team)) + '</div>' +
         '<div style="display:flex;gap:6px;justify-content:center;align-items:center;margin-top:1px;">' +
-        '<button title="Usar color primario" style="width:16px;height:16px;border-radius:50%;border:2px solid #fff;box-shadow:' + primaryRing + ';background:' + primaryColor + ';cursor:pointer;transition:transform .15s;" onclick="event.stopPropagation();setSlotActiveColor(' + i + ','primary')" onmouseover="this.style.transform='scale(1.25)'" onmouseout="this.style.transform='scale(1)'"></button>' +
-        '<button title="Usar color secundario" style="width:16px;height:16px;border-radius:50%;border:2px solid #fff;box-shadow:' + secondaryRing + ';background:' + secondaryColor + ';cursor:pointer;transition:transform .15s;" onclick="event.stopPropagation();setSlotActiveColor(' + i + ','secondary')" onmouseover="this.style.transform='scale(1.25)'" onmouseout="this.style.transform='scale(1)'"></button>' +
+        '<button title="Usar color primario" style="width:16px;height:16px;border-radius:50%;border:2px solid #fff;box-shadow:' + primaryRing + ';background:' + primaryColor + ';cursor:pointer;transition:transform .15s;" onclick="event.stopPropagation();setSlotActiveColor(' + i + ', &quot;primary&quot;)" onmouseover="this.style.transform=&quot;scale(1.25)&quot;" onmouseout="this.style.transform=&quot;scale(1)&quot;"></button>' +
+        '<button title="Usar color secundario" style="width:16px;height:16px;border-radius:50%;border:2px solid #fff;box-shadow:' + secondaryRing + ';background:' + secondaryColor + ';cursor:pointer;transition:transform .15s;" onclick="event.stopPropagation();setSlotActiveColor(' + i + ', &quot;secondary&quot;)" onmouseover="this.style.transform=&quot;scale(1.25)&quot;" onmouseout="this.style.transform=&quot;scale(1)&quot;"></button>' +
         '</div>' +
         '<div class="slot-actions">' +
         '<button class="color-btn" title="Editar colores" onclick="event.stopPropagation();openColorModal(' + i + ')">🎨</button>' +
@@ -983,27 +982,15 @@ function generateINI() {
   for (var i = 0; i < 50; i++) { if (slots[i] !== null) used.push({ team: slots[i], index: i }); }
   if (used.length === 0) { showToast('No hay equipos en los slots', 'error'); return; }
   var today = new Date().toISOString().split('T')[0];
-  var ini = '[/Script/ShadowTrackerExtra.FCustomTeamLogoAndColor]
-EnableTeamLogoAndColor=1
-';
+  var ini = '[/Script/ShadowTrackerExtra.FCustomTeamLogoAndColor]\nEnableTeamLogoAndColor=1\n';
   for (var u = 0; u < used.length; u++) {
     var slotNum = used[u].index + 1, team = used[u].team;
     var pc = getSlotPrimaryColor(used[u].index), rgba = hexToRGBA(pc);
-    ini += 'TeamLogoAndColor=(TeamNo=' + slotNum + ',TeamName=' + team.teamName + ',TeamLogoPath=C:/logo/' + padSlot(slotNum) + '.png,KillInfoPath=C:/logo/' + padSlot(slotNum) + '.png,TeamColorR=' + rgba.r + ',TeamColorG=' + rgba.g + ',TeamColorB=' + rgba.b + ',TeamColorA=255,PlayerColorR=0,PlayerColorG=255,PlayerColorB=0,PlayerColorA=255,CornerMarkPath=,fin)
-';
+    ini += 'TeamLogoAndColor=(TeamNo=' + slotNum + ',TeamName=' + team.teamName + ',TeamLogoPath=C:/logo/' + padSlot(slotNum) + '.png,KillInfoPath=C:/logo/' + padSlot(slotNum) + '.png,TeamColorR=' + rgba.r + ',TeamColorG=' + rgba.g + ',TeamColorB=' + rgba.b + ',TeamColorA=255,PlayerColorR=0,PlayerColorG=255,PlayerColorB=0,PlayerColorA=255,CornerMarkPath=,fin)\n';
   }
-  ini += '
-[/Script/ShadowTrackerExtra.FCustomTeammatePic]
-EnableTeammatePic=1
-TeammatePic=(PlayerName=,PicPath=,fin).
-
-# TAGS:
-';
-  for (var u2 = 0; u2 < used.length; u2++) { ini += '# ' + (used[u2].index + 1) + ': ' + generateTag(used[u2].team) + '
-'; }
-  ini += '
-# Evento: ' + today + '
-';
+  ini += '\n[/Script/ShadowTrackerExtra.FCustomTeammatePic]\nEnableTeammatePic=1\nTeammatePic=(PlayerName=,PicPath=,fin)\n\n# TAGS:\n';
+  for (var u2 = 0; u2 < used.length; u2++) { ini += '# ' + (used[u2].index + 1) + ': ' + generateTag(used[u2].team) + '\n'; }
+  ini += '\n# Evento: ' + today + '\n';
   var blob = new Blob([ini], { type: 'text/plain' });
   var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'TeamLogoAndColor.ini'; a.click();
   URL.revokeObjectURL(a.href);
@@ -1054,27 +1041,15 @@ async function exportAllZIP() {
   showLoading('Generando ZIP con ' + used.length + ' equipos...');
   try {
     var zip = new JSZip(), today = new Date().toISOString().split('T')[0];
-    var ini = '[/Script/ShadowTrackerExtra.FCustomTeamLogoAndColor]
-EnableTeamLogoAndColor=1
-';
+    var ini = '[/Script/ShadowTrackerExtra.FCustomTeamLogoAndColor]\nEnableTeamLogoAndColor=1\n';
     for (var u = 0; u < used.length; u++) {
       var slotNum = used[u].index + 1, team = used[u].team;
       var pc = getSlotPrimaryColor(used[u].index), rgba = hexToRGBA(pc);
-      ini += 'TeamLogoAndColor=(TeamNo=' + slotNum + ',TeamName=' + team.teamName + ',TeamLogoPath=C:/logo/' + padSlot(slotNum) + '.png,KillInfoPath=C:/logo/' + padSlot(slotNum) + '.png,TeamColorR=' + rgba.r + ',TeamColorG=' + rgba.g + ',TeamColorB=' + rgba.b + ',TeamColorA=255,PlayerColorR=0,PlayerColorG=255,PlayerColorB=0,PlayerColorA=255,CornerMarkPath=,fin)
-';
+      ini += 'TeamLogoAndColor=(TeamNo=' + slotNum + ',TeamName=' + team.teamName + ',TeamLogoPath=C:/logo/' + padSlot(slotNum) + '.png,KillInfoPath=C:/logo/' + padSlot(slotNum) + '.png,TeamColorR=' + rgba.r + ',TeamColorG=' + rgba.g + ',TeamColorB=' + rgba.b + ',TeamColorA=255,PlayerColorR=0,PlayerColorG=255,PlayerColorB=0,PlayerColorA=255,CornerMarkPath=,fin)\n';
     }
-    ini += '
-[/Script/ShadowTrackerExtra.FCustomTeammatePic]
-EnableTeammatePic=1
-TeammatePic=(PlayerName=,PicPath=,fin).
-
-# TAGS:
-';
-    for (var u2 = 0; u2 < used.length; u2++) { ini += '# ' + (used[u2].index + 1) + ': ' + generateTag(used[u2].team) + '
-'; }
-    ini += '
-# Evento: ' + today + '
-';
+    ini += '\n[/Script/ShadowTrackerExtra.FCustomTeammatePic]\nEnableTeammatePic=1\nTeammatePic=(PlayerName=,PicPath=,fin)\n\n# TAGS:\n';
+    for (var u2 = 0; u2 < used.length; u2++) { ini += '# ' + (used[u2].index + 1) + ': ' + generateTag(used[u2].team) + '\n'; }
+    ini += '\n# Evento: ' + today + '\n';
     zip.file('TeamLogoAndColor.ini', ini);
     for (var u3 = 0; u3 < used.length; u3++) {
       var p = padSlot(used[u3].index + 1), s = used[u3].team.logoPng;
@@ -1114,8 +1089,7 @@ function updateEventLinks() {
     '🌐 final:       ' + base + path + '/final_' + name + '.html',
     '🌐 control:     ' + base + path + '/overlay_control.html'
   ];
-  out.innerHTML = lines.map(function(l) { return l.startsWith('🌐') ? '<span class="link-line">' + escapeHtml(l) + '</span>' : escapeHtml(l); }).join('
-');
+  out.innerHTML = lines.map(function(l) { return l.startsWith('🌐') ? '<span class="link-line">' + escapeHtml(l) + '</span>' : escapeHtml(l); }).join('\n');
 }
 function copyEventLinks() {
   var text = $('eventLinksOutput').textContent;
