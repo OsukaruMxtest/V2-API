@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Overlay Control — Broadcast Panel</title>
+    <script>document.title = 'Overlay Control — ' + (window.location.pathname.match(/\/eventos\/([^\/]+)/)?.[1]?.toUpperCase() || 'DEFAULT');</script>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap">
     <script src="overlay_config.js"></script>
     <script src="overlay_event_bus.js"></script>
@@ -951,6 +952,7 @@
         .obs-apply-btn { width: 100%; margin-top: 8px; padding: 6px; background: #2980b9; border: none; color: #fff; font-weight: 700; border-radius: 6px; cursor: pointer; font-size: 11px; }
         .obs-apply-btn:hover { background: #1a6a9e; }
     </style>
+<base target="_blank">
 </head>
 <body>
 
@@ -1300,8 +1302,210 @@
 (function () {
     'use strict';
 
+    // ============================================================
+    // EVENT ISOLATION & MODULAR ARCHITECTURE
+    // ============================================================
+    const EVENT_ID = (() => {
+        const m = window.location.pathname.match(/\/eventos\/([^\/]+)/);
+        return m ? m[1] : 'default';
+    })();
+    const BASE_EVENT_PATH = `/eventos/${EVENT_ID}/`;
+    const EVENT_PREFIX = EVENT_ID.toUpperCase();
+
+    window.EventRuntime = {
+        eventId: EVENT_ID,
+        eventPath: BASE_EVENT_PATH,
+        overlayPath: `${BASE_EVENT_PATH}`,
+        sharedPath: '/shared/',
+        configKey: `overlayConfig_${EVENT_ID}`,
+        channels: {
+            commands: `pubgm_commands_${EVENT_ID}`,
+            snapshot: `pubgm_snapshot_${EVENT_ID}`,
+            config:   `pubgm_config_${EVENT_ID}`,
+            heartbeat:`pubgm_heartbeat_${EVENT_ID}`
+        },
+        storageKeys: {
+            config:            `overlayConfig_${EVENT_ID}`,
+            state:             `overlayState_${EVENT_ID}`,
+            manualCmd:         `overlayManualCmd_${EVENT_ID}`,
+            debugMode:         `debugMode_${EVENT_ID}`,
+            seqState:          `__seqState_${EVENT_ID}`,
+            seqMode:           `seqMode_${EVENT_ID}`,
+            seqManualMode:     `seqManualMode_${EVENT_ID}`,
+            scoringConfig:     `scoringConfig_${EVENT_ID}`,
+            obsBlockedList:    `obsBlockedList_${EVENT_ID}`,
+            showUtilitiesTop3: `showUtilitiesTop3_${EVENT_ID}`,
+            dropExportEnabled: `dropExportEnabled_${EVENT_ID}`,
+            dropsVisible:      `dropsVisible_${EVENT_ID}`,
+            zonesPrefix:       `zones_${EVENT_ID}_`,
+            overlayConfigUpdate: `overlayConfigUpdate_${EVENT_ID}`
+        }
+    };
+
+    const EventLogger = {
+        _prefix: `[${EVENT_PREFIX}]`,
+        log(...a)   { console.log(this._prefix, ...a); },
+        warn(...a)  { console.warn(this._prefix, ...a); },
+        error(...a) { console.error(this._prefix, ...a); }
+    };
+
+    function createEventChannel(type) {
+        const name = EventRuntime.channels[type] || `pubgm_${type}_${EVENT_ID}`;
+        try { return new BroadcastChannel(name); } catch(e) { return null; }
+    }
+
+    // Legacy bridge: global channel for old overlays
+    let _legacyCmdChannel = null;
+    try { _legacyCmdChannel = new BroadcastChannel('pubgm_commands'); } catch(e) {}
+
+    const EventBus = {
+        publish(type, payload) {
+            const fullPayload = Object.assign({}, payload, { eventId: EVENT_ID, _source: 'overlay_control' });
+            const ch = createEventChannel(type);
+            if (ch) { ch.postMessage(fullPayload); ch.close(); }
+            if (_legacyCmdChannel && type === 'commands') {
+                _legacyCmdChannel.postMessage(fullPayload);
+            }
+            if (type === 'commands') {
+                try {
+                    localStorage.setItem(EventRuntime.storageKeys.manualCmd, JSON.stringify(Object.assign({}, payload, { timestamp: Date.now() })));
+                    localStorage.setItem('overlay_manual_cmd', JSON.stringify(Object.assign({}, payload, { timestamp: Date.now() })));
+                } catch(e) {}
+            }
+        }
+    };
+
+    // Cleanup
+    function destroy() {
+        if (_legacyCmdChannel) { _legacyCmdChannel.close(); _legacyCmdChannel = null; }
+        if (typeof _snapshotInterval !== 'undefined' && _snapshotInterval) { clearInterval(_snapshotInterval); _snapshotInterval = null; }
+        if (typeof _monitorInterval !== 'undefined' && _monitorInterval) { clearInterval(_monitorInterval); _monitorInterval = null; }
+        if (typeof overlayTimerInterval !== 'undefined' && overlayTimerInterval) { clearInterval(overlayTimerInterval); overlayTimerInterval = null; }
+        if (typeof animationRequestId !== 'undefined' && animationRequestId) { cancelAnimationFrame(animationRequestId); animationRequestId = null; }
+        if (typeof _heartbeatInterval !== 'undefined' && _heartbeatInterval) { clearInterval(_heartbeatInterval); _heartbeatInterval = null; }
+        EventLogger.log('Destroyed event runtime for', EVENT_ID);
+    }
+    window.addEventListener('beforeunload', destroy);
+
+    // Overlay Registry
+    const OVERLAY_REGISTRY = [
+        { id:'alerts',        name:'Alertas',          url:'alerts.html',        category:'broadcast', enabled:true },
+        { id:'bars',          name:'Barras Equipos',   url:'bars.html',          category:'broadcast', enabled:true },
+        { id:'map',           name:'Mapa',             url:'map.html',           category:'game',      enabled:true },
+        { id:'final_aniversario', name:'Final Aniversario', url:'final_aniversario.html', category:'finals', enabled:true },
+        { id:'tabla_desafios',    name:'Tabla Desafíos',    url:'tabla_desafios.html',    category:'tables', enabled:true },
+        { id:'tabla_final_aniversario', name:'Tabla General', url:'tabla_final_aniversario.html', category:'tables', enabled:true },
+        { id:'wwcd',          name:'WWCD',             url:'wwcd.html',          category:'finals',    enabled:true },
+    ];
+
+    function getOverlayUrl(overlayId) {
+        const entry = OVERLAY_REGISTRY.find(o => o.id === overlayId);
+        return entry ? `${BASE_EVENT_PATH}${entry.url}` : `${BASE_EVENT_PATH}${overlayId}.html`;
+    }
+
+    // Anti-flood dedupe
+    const _recentCmds = new Set();
+    setInterval(() => _recentCmds.clear(), 500);
+
+    // HTML sanitizer helper
+    function escapeHtml(text) {
+        if (text == null) return '';
+        return String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // Team override loader
+    async function loadTeamOverrides() {
+        try {
+            const res = await fetch(`${BASE_EVENT_PATH}teams_override.json`, { cache:'no-cache' });
+            if (!res.ok) return;
+            const overrides = await res.json();
+            if (overrides && typeof overrides === 'object') {
+                Object.assign(MapEngine.teamNames, overrides.names || {});
+                Object.assign(MapEngine.teamColors, overrides.colors || {});
+                EventLogger.log('Team overrides loaded', Object.keys(overrides.names||{}).length);
+            }
+        } catch(e) { /* silent fail */ }
+    }
+
+    // Heartbeat emitter
+    let _heartbeatInterval = null;
+    function startHeartbeat() {
+        if (_heartbeatInterval) return;
+        _heartbeatInterval = setInterval(() => {
+            const ch = createEventChannel('heartbeat');
+            if (ch) {
+                ch.postMessage({ eventId: EVENT_ID, ts: Date.now(), source: 'control' });
+                ch.close();
+            }
+        }, 3000);
+    }
+    startHeartbeat();
+
+    // ============================================================
+    // BROADCASTCHANNEL POLYFILL FALLBACK
+    // ============================================================
     if (typeof BroadcastChannel === 'undefined') {
-        console.warn('[OVERLAY CONTROL] BroadcastChannel no soportado en este navegador. La sincronización entre overlays podría no funcionar.');
+        (function(global) {
+            var channels = {};
+            function BroadcastChannelPolyfill(channel) {
+                var $this = this;
+                channel = String(channel);
+                var id = '$BroadcastChannel$' + channel + '$';
+                channels[id] = channels[id] || [];
+                channels[id].push(this);
+                this._name = channel;
+                this._id = id;
+                this._closed = false;
+                this._mc = new MessageChannel();
+                this._mc.port1.start();
+                this._mc.port2.start();
+                global.addEventListener('storage', function(e) {
+                    if (e.storageArea !== global.localStorage) return;
+                    if (e.newValue === null) return;
+                    if (e.key.substring(0, id.length) !== id) return;
+                    var data = JSON.parse(e.newValue);
+                    $this._mc.port2.postMessage(data);
+                });
+            }
+            BroadcastChannelPolyfill.prototype = {
+                get name() { return this._name; },
+                postMessage: function(message) {
+                    if (this._closed) { var e = new Error(); e.name = 'InvalidStateError'; throw e; }
+                    var value = JSON.stringify(message);
+                    var key = this._id + String(Date.now()) + '$' + String(Math.random());
+                    global.localStorage.setItem(key, value);
+                    setTimeout(function() { global.localStorage.removeItem(key); }, 500);
+                    channels[this._id].forEach(function(bc) {
+                        if (bc === this) return;
+                        bc._mc.port2.postMessage(JSON.parse(value));
+                    });
+                },
+                close: function() {
+                    if (this._closed) return;
+                    this._closed = true;
+                    this._mc.port1.close();
+                    this._mc.port2.close();
+                    var index = channels[this._id].indexOf(this);
+                    if (index !== -1) channels[this._id].splice(index, 1);
+                },
+                get onmessage() { return this._mc.port1.onmessage; },
+                set onmessage(value) { this._mc.port1.onmessage = value; },
+                addEventListener: function() { return this._mc.port1.addEventListener.apply(this._mc.port1, arguments); },
+                removeEventListener: function() { return this._mc.port1.removeEventListener.apply(this._mc.port1, arguments); },
+                dispatchEvent: function() { return this._mc.port1.dispatchEvent.apply(this._mc.port1, arguments); }
+            };
+            global.BroadcastChannel = global.BroadcastChannel || BroadcastChannelPolyfill;
+        }(self));
+    }
+
+    // ============================================================
+    // END ARCHITECTURE BLOCK
+    // ============================================================
+
+    if (typeof BroadcastChannel === 'undefined') {
+        console.warn(`[${EVENT_PREFIX}] BroadcastChannel no soportado. Usando polyfill localStorage/MessageChannel.`);
+    } else {
+        EventLogger.log('BroadcastChannel nativo disponible');
     }
 
     const AGGREGATOR_URL = "https://v2-api-production-db45.up.railway.app";
@@ -1448,7 +1652,7 @@
         });
         if (typeof BroadcastChannel === 'undefined') {
             const msg = 'BroadcastChannel no soportado en este navegador/entorno. Los overlays esclavos no recibirán comandos.';
-            console.error('[OVERLAY CONTROL] ' + msg);
+            EventLogger.error(msg);
             alert('⚠️ ' + msg);
         }
     })();
@@ -1472,6 +1676,13 @@
             'hide_overlay'
         ]);
 
+        const dedupeKey = `${cmd}_${Math.floor(now/200)}`;
+        if (_recentCmds.has(dedupeKey)) {
+            logConsole('CMD', `DEDUPE ${cmd}`, false);
+            return;
+        }
+        _recentCmds.add(dedupeKey);
+
         if (!NO_RATE_LIMIT.has(cmd)) {
             if (now - lastCmdTimeGeneral < CMD_DELAY) {
                 const msg = `CMD BLOCKED (rate limit) ${cmd}`;
@@ -1488,14 +1699,16 @@
         // lsPayload debe incluir los datos semánticos del extraPayload (ej: mode)
         const lsPayload = JSON.stringify(Object.assign({ command: cmd, timestamp: uniqueTs, _source: 'overlay_control' }, extraPayload || {}));
         try {
-            localStorage.setItem('overlay_manual_cmd', lsPayload);
+            localStorage.setItem(EventRuntime.storageKeys.manualCmd, lsPayload);
+            localStorage.setItem('overlay_manual_cmd', lsPayload); // legacy bridge
         } catch(e) {
             logConsole('CMD', `localStorage error: ${e.message}`, false);
         }
         if (window.OverlayBridge && typeof OverlayBridge.dispatch === 'function') {
-            try { OverlayBridge.dispatch(payload); }
+            try { OverlayBridge.dispatch(Object.assign({}, payload, { eventId: EVENT_ID })); }
             catch(e) { logConsole('CMD', `OverlayBridge.dispatch error: ${e.message}`, false); }
         }
+        EventBus.publish('commands', payload);
 
         console.log('[OVERLAY_CONTROL SEND]', cmd, uniqueTs);
 
@@ -1545,12 +1758,12 @@
                 for (const [cat, vals] of Object.entries(patch))
                     this._data[cat] = Object.assign(this._data[cat] || {}, vals);
                 this._listeners.forEach(fn => fn(this._data));
-                try { localStorage.setItem('overlayConfig', JSON.stringify(this._data)); } catch(e){}
+                try { localStorage.setItem(EventRuntime.storageKeys.config, JSON.stringify(this._data)); } catch(e){}
             },
             subscribe(fn) { this._listeners.push(fn); }
         };
         try {
-            const s = localStorage.getItem('overlayConfig');
+            const s = localStorage.getItem(EventRuntime.storageKeys.config);
             if (s) OverlayConfig._data = JSON.parse(s);
         } catch(e){}
     }
@@ -1560,9 +1773,9 @@
 
     function applyDebugMode(active) {
         debugPanel.classList.toggle('visible', active);
-        localStorage.setItem('debugMode', active ? 'true' : 'false');
+        localStorage.setItem(EventRuntime.storageKeys.debugMode, active ? 'true' : 'false');
     }
-    const initDebug = localStorage.getItem('debugMode') === 'true';
+    const initDebug = localStorage.getItem(EventRuntime.storageKeys.debugMode) === 'true';
     debugToggle.checked = initDebug;
     applyDebugMode(initDebug);
 
@@ -1599,7 +1812,7 @@
         cb.addEventListener('change', function() {
             config.set({ [this.dataset.category]: { [this.dataset.key]: this.checked } });
             try {
-                localStorage.setItem('overlay_config_update', JSON.stringify({
+                localStorage.setItem(EventRuntime.storageKeys.overlayConfigUpdate, JSON.stringify({
                     category:  this.dataset.category,
                     key:       this.dataset.key,
                     value:     this.checked,
@@ -1627,7 +1840,7 @@
             const value = this.checked ? 'individual' : 'team';
             config.set({ display: { displayMode: value } });
             try {
-                localStorage.setItem('overlay_config_update', JSON.stringify({
+                localStorage.setItem(EventRuntime.storageKeys.overlayConfigUpdate, JSON.stringify({
                     category: 'display',
                     key: 'displayMode',
                     value: value,
@@ -1930,7 +2143,7 @@
                 resizeCanvases(); mapLoaded = true;
                 _dirtyMap = _dirtyCircles = _dirtyPlayers = _dirtyZones = true;
             };
-            backgroundImage.onerror = () => console.warn('Error al cargar mapa');
+            backgroundImage.onerror = () => EventLogger.warn('Error al cargar mapa');
             backgroundImage.src = url;
         }
 
@@ -2515,7 +2728,7 @@
                 MapEngine.processCircleInfo(snapshot.circleinfo.circleInfo, snapshot.circleinfo.CircleArray);
         } catch(err) {
             addConsoleEntry('SNAPSHOT', `ERROR: ${err.message}`, false);
-            console.warn('Servidor no disponible:', err.message);
+            EventLogger.warn('Servidor no disponible:', err.message);
         } finally {
             fetchingSnapshot = false;
         }
@@ -2556,7 +2769,7 @@
         }
 
         function loadZonesForMap(mapName) {
-            const stored = localStorage.getItem(`zones_${mapName}`);
+            const stored = localStorage.getItem(EventRuntime.storageKeys.zonesPrefix + mapName);
             if (stored) {
                 try { zones[mapName] = JSON.parse(stored); if (!zones[mapName].teamDrops) zones[mapName].teamDrops = []; }
                 catch(e) { zones[mapName] = { map:mapName, version:3, teamDrops:[] }; }
@@ -2574,12 +2787,12 @@
             teamJumpedSet.clear();
             autoExportDropsDone = false;
             if (allPlayersLandedTimer) { clearTimeout(allPlayersLandedTimer); allPlayersLandedTimer = null; }
-            dropsVisible = localStorage.getItem('dropsVisible') === 'true';
+            dropsVisible = localStorage.getItem(EventRuntime.storageKeys.dropsVisible) === 'true';
             MapEngine.setDirtyZones();
         }
 
         function saveZones() {
-            if (currentMap) localStorage.setItem(`zones_${currentMap}`, JSON.stringify(zones[currentMap]));
+            if (currentMap) localStorage.setItem(EventRuntime.storageKeys.zonesPrefix + currentMap, JSON.stringify(zones[currentMap]));
         }
 
         function findLargestCluster(points, thresh) {
@@ -2692,11 +2905,11 @@
             if (autoExportDropsDone) return;
             const toggle = document.getElementById('dropExportToggle');
             if (toggle && !toggle.checked) {
-                console.log('[ZoneManager] Auto-export desactivado por toggle');
+                EventLogger.log('Auto-export desactivado por toggle');
                 return;
             }
             autoExportDropsDone = true;
-            console.log('[ZoneManager] Auto-export disparado por:', reason);
+            EventLogger.log('Auto-export disparado por:', reason);
             exportDropsAndPositions();
         }
 
@@ -2723,7 +2936,7 @@
                 };
             });
             const totalPts = playerData.reduce((s, p) => s + p.positions.length, 0);
-            console.log('[ZoneManager] Export:', playerData.length, 'players,', totalPts, 'puntos de trayectoria');
+            EventLogger.log('Export:', playerData.length, 'players,', totalPts, 'puntos de trayectoria');
 
             const exportObj = {
                 version: '2D-3D-ready',
@@ -2756,7 +2969,7 @@
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
-            console.log('[ZoneManager] Export completado:', link.download);
+            EventLogger.log('Export completado:', link.download);
         }
 
         function checkGameEnd() {
@@ -2900,7 +3113,7 @@
             list.innerHTML = data.observers
                 .filter(o => o.active)
                 .map(o => {
-                    const blocked = (() => { try { return JSON.parse(localStorage.getItem('obsBlockedList')||'[]'); } catch(e){ return []; } })();
+                    const blocked = (() => { try { return JSON.parse(localStorage.getItem(EventRuntime.storageKeys.obsBlockedList)||'[]'); } catch(e){ return []; } })();
                     const isBlocked = blocked.includes(o.id) || blocked.includes(o.name);
                     const statusColor = o.fresh ? '#2ecc71' : '#f39c12';
                     const masterBadge = o.isMaster
@@ -2981,7 +3194,7 @@
             if (editToggle && editToggle.checked) {
                 editToggle.checked = false;
                 sendOverlayCommand('debug_off');
-                try { localStorage.removeItem('__seqState'); } catch(e3) {}
+                try { localStorage.removeItem(EventRuntime.storageKeys.seqState); } catch(e3) {}
             }
         }
     });
@@ -2991,7 +3204,7 @@
         const on = e.target.checked;
         sendOverlayCommand(on ? 'debug_on' : 'debug_off');
         if (!on) {
-            try { localStorage.removeItem('__seqState'); } catch(e2) {}
+            try { localStorage.removeItem(EventRuntime.storageKeys.seqState); } catch(e2) {}
         }
     });
 
@@ -3011,7 +3224,7 @@
             if (ev.target.id !== 'overlayEditToggle') return;
             _seqDebugMode = ev.target.checked;
             try {
-                const raw = localStorage.getItem('__seqState');
+                const raw = localStorage.getItem(EventRuntime.storageKeys.seqState);
                 updateUI(raw ? JSON.parse(raw) : null);
             } catch(e) {}
         });
@@ -3114,7 +3327,7 @@
 
         setInterval(() => {
             try {
-                const raw = localStorage.getItem('__seqState');
+                const raw = localStorage.getItem(EventRuntime.storageKeys.seqState);
                 if (raw) {
                     const state = JSON.parse(raw);
                     updateUI(state);
@@ -3194,10 +3407,10 @@
             if (manualBtn) { manualBtn.disabled = !on; manualBtn.style.opacity = on ? '1' : '0.4'; }
         }
         if (toggle) {
-            const savedDropExport = localStorage.getItem('dropExportEnabled');
+            const savedDropExport = localStorage.getItem(EventRuntime.storageKeys.dropExportEnabled);
             toggle.checked = savedDropExport === null ? true : savedDropExport === 'true';
             toggle.addEventListener('change', function() {
-                localStorage.setItem('dropExportEnabled', toggle.checked ? 'true' : 'false');
+                localStorage.setItem(EventRuntime.storageKeys.dropExportEnabled, toggle.checked ? 'true' : 'false');
                 syncToggle();
             });
             syncToggle();
@@ -3215,22 +3428,14 @@
         const toggle = document.getElementById('utilitiesTop3Toggle');
         if (!toggle) return;
 
-        toggle.checked = localStorage.getItem('showUtilitiesTop3') === 'true';
+        toggle.checked = localStorage.getItem(EventRuntime.storageKeys.showUtilitiesTop3) === 'true';
 
         toggle.addEventListener('change', () => {
             const on = toggle.checked;
-            localStorage.setItem('showUtilitiesTop3', on ? 'true' : 'false');
+            localStorage.setItem(EventRuntime.storageKeys.showUtilitiesTop3, on ? 'true' : 'false');
             const cmd = on ? 'utils_top3_on' : 'utils_top3_off';
 
-            try {
-                const ch = new BroadcastChannel('pubgm_commands');
-                ch.postMessage({ type: 'command', cmd, timestamp: Date.now() });
-                ch.close();
-            } catch(e) {}
-
-            try {
-                localStorage.setItem('overlay_manual_cmd', JSON.stringify({ command: cmd, timestamp: Date.now() }));
-            } catch(e) {}
+            EventBus.publish('commands', { type: 'command', cmd, timestamp: Date.now() });
 
             sendOverlayCommand(cmd);
 
@@ -3259,17 +3464,9 @@
                 btnExtend.disabled = true;
             }
             localStorage.setItem(STORAGE_KEY, manual ? 'true' : 'false');
+            EventBus.publish('commands', { type:'command', cmd: manual ? 'seq_mode_manual' : 'seq_mode_auto', timestamp: Date.now() });
             try {
-                const ch = new BroadcastChannel('pubgm_commands');
-                ch.postMessage({ type:'command', cmd: manual ? 'seq_mode_manual' : 'seq_mode_auto', timestamp: Date.now() });
-                ch.close();
-            } catch(e) {}
-            try {
-                localStorage.setItem('seqMode', manual ? 'manual' : 'auto');
-                localStorage.setItem('overlay_manual_cmd', JSON.stringify({
-                    command: manual ? 'seq_mode_manual' : 'seq_mode_auto',
-                    timestamp: Date.now()
-                }));
+                localStorage.setItem(EventRuntime.storageKeys.seqMode, manual ? 'manual' : 'auto');
             } catch(e) {}
             sendOverlayCommand(manual ? 'seq_mode_manual' : 'seq_mode_auto');
             addConsoleEntry('SEQ', `Modo: ${manual ? 'Manual' : 'Automático'}`, true);
@@ -3291,7 +3488,7 @@
         const DEFAULT_PP = { 1:20, 2:18, 3:16, 4:14, 5:12, 6:10, 7:8, 8:6, 9:5, 10:4,
                              11:3, 12:2, 13:1, 14:1, 15:1, 16:1 };
         const DEFAULT_BONUS = { grenade:3, vehicle:8, melee:13, molotov:3, distance:15, killDist:18 };
-        const STORAGE_KEY = 'scoringConfig';
+        const STORAGE_KEY = EventRuntime.storageKeys.scoringConfig;
 
         function loadConfig() {
             try {
@@ -3407,7 +3604,7 @@
     })();
 
     (function wireObsFilter() {
-        const STORAGE_KEY = 'obsBlockedList';
+        const STORAGE_KEY = EventRuntime.storageKeys.obsBlockedList;
         const grid = document.getElementById('obsFilterGrid');
         if (!grid) return;
 
@@ -3509,7 +3706,7 @@
         if (!pcobList) return;
 
         function getBlockedList() {
-            try { return JSON.parse(localStorage.getItem('obsBlockedList') || '[]'); } catch(e) { return []; }
+            try { return JSON.parse(localStorage.getItem(EventRuntime.storageKeys.obsBlockedList) || '[]'); } catch(e) { return []; }
         }
 
         const mo = new MutationObserver(() => {
@@ -3649,7 +3846,7 @@
         }
     })();
 
-    console.log("[OVERLAY CONTROL] system ready");
+    EventLogger.log("system ready");
     addConsoleEntry('SYSTEM', 'Panel listo', true);
 })();
 </script>

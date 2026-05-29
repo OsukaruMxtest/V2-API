@@ -3,18 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Alertas Aniversario (Broadcast Elegante + Flip X)</title>
+    <title>Alertas SRD-MAYO | SRD</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Teko:wght@300..700&display=swap" rel="stylesheet">
-    <!-- ===== INTEGRACIÓN CON EL SISTEMA DE CONTROL ===== -->
-    <script src="overlay_config.js"></script>
-    <script src="overlay_event_bus.js"></script>
-    <script src="overlay_bridge.js"></script>
-    <script src="overlay_sync.js"></script>
-    <!-- ================================================= -->
+    <script src="/shared/overlay_event_bus.js"></script>
+    <script src="/shared/overlay_config.js"></script>
+    <script src="/shared/overlay_bridge.js"></script>
+    <script src="/shared/overlay_sync.js"></script>
+    <script src="/shared/overlay_broadcast.js"></script>
+    <script src="/shared/team_resolver.js"></script>
     <style>
-        /* ===== SRD 2026 – BROADCAST EDITION (NUEVA PALETA CORPORATIVA) ===== */
         :root {
             --bg-deep: #2241F2;
             --primary-main: #169EF2;
@@ -29,7 +28,7 @@
 
         @font-face {
             font-family: 'HeadlinerNo45';
-            src: url('images/fonts/Headliner.ttf') format('truetype');
+            src: url('/shared/fonts/Headliner.ttf') format('truetype');
         }
 
         body {
@@ -44,7 +43,6 @@
             perspective: 1200px;
         }
 
-        /* === POSICIÓN LATERAL BROADCAST — FLIP IN/OUT X DESDE ABAJO === */
         .banner {
             position: absolute;
             display: none;
@@ -66,7 +64,6 @@
             filter: blur(0);
         }
 
-        /* === CONTENEDOR TRANSPARENTE SIN IMAGEN DE FONDO === */
         .alert-container {
             position: relative;
             background: transparent;
@@ -85,7 +82,6 @@
             overflow: hidden;
         }
 
-        /* === VIDEO DE FONDO EN CADA ALERTA === */
         .alert-video {
             position: absolute;
             inset: 0;
@@ -116,7 +112,7 @@
             100% { box-shadow: 0 8px 20px rgba(0,0,0,0.55), 0 0 15px rgba(34,204,242,0.3); }
         }
 
-        #firstGrenadeKillBanner .fire-overlay {
+        .fire-overlay {
             position: absolute;
             top: 0;
             left: 0;
@@ -131,13 +127,15 @@
             display: none;
         }
 
+        #firstGrenadeKillBanner.show .fire-overlay {
+            display: block;
+            opacity: 1;
+            animation: microFlash 0.12s 1, flickerFire 0.15s infinite alternate;
+        }
+
         @keyframes flickerFire {
             0%, 100% { opacity: 0.8; }
             50% { opacity: 1; }
-        }
-
-        .banner.show #firstGrenadeKillBanner .fire-overlay {
-            animation: microFlash 0.12s 1, flickerFire 0.15s infinite alternate;
         }
 
         @keyframes microFlash {
@@ -386,11 +384,10 @@
     </style>
 </head>
 <body>
-    <!-- PRIMERA BAJA -->
     <div id="firstKillBanner" class="banner">
         <div class="alert-container">
             <video class="alert-video" autoplay muted loop playsinline preload="auto">
-                <source src="images/background.mp4" type="video/mp4">
+                <source src="/shared/assets/background.mp4" type="video/mp4">
             </video>
             <h3 class="alert-title">PRIMERA BAJA</h3>
             <div class="alert-player-info">
@@ -400,12 +397,12 @@
         </div>
     </div>
 
-    <!-- PRIMERA BAJA CON GRANADA -->
     <div id="firstGrenadeKillBanner" class="banner">
         <div class="alert-container">
             <video class="alert-video" autoplay muted loop playsinline preload="auto">
-                <source src="images/background.mp4" type="video/mp4">
+                <source src="/shared/assets/background.mp4" type="video/mp4">
             </video>
+            <div class="fire-overlay"></div>
             <h3 class="alert-title">PRIMERA BAJA CON GRANADA</h3>
             <div class="alert-player-info">
                 <span class="alert-logo-wrap"><img class="alert-logo" src="" alt="Logo"></span>
@@ -414,13 +411,12 @@
         </div>
     </div>
 
-    <!-- EQUIPO / JUGADOR ELIMINADO (título dinámico) -->
     <div id="eliminationBanner" class="banner">
         <div class="alert-container">
             <video class="alert-video" autoplay muted loop playsinline preload="auto">
-                <source src="images/background.mp4" type="video/mp4">
+                <source src="/shared/assets/background.mp4" type="video/mp4">
             </video>
-            <h3 class="alert-title">EQUIPO ELIMINADO</h3> <!-- Se actualiza dinámicamente -->
+            <h3 class="alert-title">EQUIPO ELIMINADO</h3>
             <div class="alert-player-info">
                 <span class="alert-logo-wrap"><img class="alert-logo" src="" alt="Logo"></span>
                 <p class="alert-player-name" id="eliminationText">Cargando...</p>
@@ -428,9 +424,8 @@
         </div>
     </div>
 
-    <!-- Alerta de zona -->
     <video id="circleWarningImage" muted autoplay loop playsinline>
-        <source src="images/zona.webm" type="video/webm">
+        <source src="/shared/assets/zona.webm" type="video/webm">
         Tu navegador no soporta el video.
     </video>
     <div id="progressBarOverlay">
@@ -452,17 +447,24 @@
     </div>
 
     <script>
-        // ============================================================
-        // CONFIGURACIÓN DE ALERTAS DESDE OVERLAY_CONTROL
-        // ============================================================
+        const EVENT_NAME = "SRD-MAYO";
+        const EVENT_DATE = "2026-05-27";
+        const SAFE_EVENT_NAME = EVENT_NAME
+            .trim()
+            .replace(/[<>:"/\\|?*]+/g, '')
+            .replace(/\s+/g, '_');
+
+        window.API_BASE = window.API_BASE || "https://v2-api-production-db45.up.railway.app";
+        const SNAPSHOT_ENDPOINT = `${window.API_BASE}/getmatchsnapshot`;
+        const COMMAND_ENDPOINT = `${window.API_BASE}/overlaycommand`;
+
         let ALERT_SETTINGS = {
             firstKill: true,
             firstGrenade: true,
             teamEliminated: true,
             zone: true
         };
-
-        let displayMode = "team"; // "team" o "individual"
+        let displayMode = "team";
 
         function getEliminationMessage() {
             return displayMode === "individual" ? "JUGADOR ELIMINADO" : "EQUIPO ELIMINADO";
@@ -475,7 +477,6 @@
             }
         }
 
-        // Leer configuración inicial
         if (window.OverlayConfig) {
             const cfg = OverlayConfig.get();
             if (cfg) {
@@ -485,19 +486,16 @@
                 displayMode = cfg?.display?.displayMode || "team";
                 updateEliminationTitle();
             }
-
             OverlayConfig.subscribe(function(config){
                 if (!config) return;
                 if (config.alerts) {
                     ALERT_SETTINGS = { ...ALERT_SETTINGS, ...config.alerts };
-                    console.log("⚙️ ALERT SETTINGS UPDATED:", ALERT_SETTINGS);
                     if (!ALERT_SETTINGS.zone && typeof stopCircleAnimation === 'function') {
                         stopCircleAnimation();
                     }
                 }
                 if (config.display && config.display.displayMode) {
                     displayMode = config.display.displayMode;
-                    console.log("🖥️ Display mode actualizado:", displayMode);
                     updateEliminationTitle();
                 }
             });
@@ -507,29 +505,65 @@
             return ALERT_SETTINGS[type] === true;
         }
 
-        // Sincronización vía OverlayBus
         if (window.OverlayBus) {
             OverlayBus.on("config_updated", function(cfg){
                 if (!cfg) return;
                 if (cfg.alerts) {
                     ALERT_SETTINGS = { ...ALERT_SETTINGS, ...cfg.alerts };
-                    console.log("🔄 Config sync via OverlayBus:", ALERT_SETTINGS);
                 }
                 if (cfg.display && cfg.display.displayMode) {
                     displayMode = cfg.display.displayMode;
-                    console.log("🔄 Display mode sync via OverlayBus:", displayMode);
                     updateEliminationTitle();
                 }
             });
         }
 
-        // ============================================================
-        // LÓGICA MULTI-OBSERVER Y SNAPSHOTS
-        // ============================================================
-        const OBSERVER_ENDPOINTS = [
-            "https://v2-api-production-db45.up.railway.app/getmatchsnapshot",
-        ];
+        window.eventConfig = null;
+        const teamLogoCache = new Map();
+        const DEFAULT_LOGO = '/shared/assets/default_logo.png';
+        const FALLBACK_LOGO = '/shared/assets/default_logo.png';
 
+        async function loadEventConfig() {
+            try {
+                const res = await fetch(`/eventos/${SAFE_EVENT_NAME}/event_config.json`);
+                if (!res.ok) throw new Error('No se pudo cargar event_config.json');
+                window.eventConfig = await res.json();
+                console.log('[Alertas] event_config.json cargado');
+            } catch (err) {
+                console.warn('[Alertas] event_config.json no disponible, usando configuración por defecto.');
+                window.eventConfig = { teams: [] };
+            }
+            await precacheTeamLogos();
+        }
+
+        async function precacheTeamLogos() {
+            const teams = window.eventConfig?.teams || [];
+            for (const team of teams) {
+                const teamId = team.teamId;
+                if (!teamId) continue;
+                let logoPath = FALLBACK_LOGO;
+                if (team.logoWebm) {
+                    logoPath = team.logoWebm;
+                } else if (team.logoPng) {
+                    logoPath = team.logoPng;
+                } else if (team.logo) {
+                    logoPath = team.logo;
+                } else {
+                    logoPath = DEFAULT_LOGO;
+                }
+                teamLogoCache.set(teamId, logoPath);
+            }
+            if (!teamLogoCache.has('default')) {
+                teamLogoCache.set('default', DEFAULT_LOGO);
+            }
+        }
+
+        function getTeamLogoPath(teamId) {
+            if (!teamId) return teamLogoCache.get('default') || DEFAULT_LOGO;
+            return teamLogoCache.get(teamId) || teamLogoCache.get('default') || DEFAULT_LOGO;
+        }
+
+        const OBSERVER_ENDPOINTS = [SNAPSHOT_ENDPOINT];
         let LAST_GOOD_SNAPSHOT = null;
         let FETCH_IN_PROGRESS = false;
         let CURRENT_OBSERVER_INDEX = 0;
@@ -632,9 +666,6 @@
             if (newSnapshot) CURRENT_SNAPSHOT = newSnapshot;
         }
 
-        // ============================================================
-        // ESTADO DE PARTIDA
-        // ============================================================
         const DEBUG_MODE = false;
         let currentGameId = null, currentGameStartTime = 0, isGameFinished = false;
         let firstKillShown = false, firstGrenadeKillShown = false;
@@ -646,7 +677,6 @@
         let teamMembers = new Map();
         let uidToTeamId = new Map();
 
-        // ========== FUNCIONES DE CHECKPOINT (mantenidas) ==========
         const CHECKPOINT_INDEX_KEY = 'srd_overlay_checkpoint_index_v2';
         function compressCheckpoint(checkpoint) { return [checkpoint.gameId, checkpoint.lastKillTime, checkpoint.lastKillHash || '', checkpoint.timestamp]; }
         function decompressCheckpoint(data) { return { gameId: data[0], lastKillTime: data[1], lastKillHash: data[2], timestamp: data[3] }; }
@@ -682,12 +712,6 @@
             console.log('🎮 Estado de partida reiniciado');
         }
 
-        function getTeamLogoPath(teamId) {
-            if (!teamId) return '../assets/logos/default.png';
-            const paddedId = teamId.toString().padStart(3, '0');
-            return `../assets/logos/${paddedId}.png`;
-        }
-
         function createFireParticles(container) {
             container.querySelectorAll('.particle').forEach(p => p.remove());
             for (let i = 0; i < 12; i++) {
@@ -719,7 +743,6 @@
             const logoElement = banner.querySelector('.alert-logo');
             container.classList.remove('snap-out');
 
-            // ⚡ NUEVO: Título siempre refleja el modo actual para eliminaciones
             const titleElement = banner.querySelector('.alert-title');
             if (titleElement) {
                 if (bannerId === 'eliminationBanner') {
@@ -730,18 +753,24 @@
             }
 
             textElement.textContent = text;
-            logoElement.src = logoPath || '../assets/logos/default.png';
-            logoElement.onerror = () => { logoElement.src = '../assets/logos/default.png'; };
+            logoElement.src = logoPath || DEFAULT_LOGO;
+            logoElement.onerror = () => { logoElement.src = FALLBACK_LOGO; };
             logoElement.classList.remove('logo-impact');
             void logoElement.offsetWidth;
             logoElement.classList.add('logo-impact');
+
+            if (bannerId === 'firstGrenadeKillBanner') {
+                createFireParticles(container);
+            }
 
             banner.style.display = 'block';
             const vid = banner.querySelector('.alert-video');
             if (vid) { vid.currentTime = 0; vid.play().catch(() => {}); }
             setTimeout(() => banner.classList.add('show'), 10);
+
             setTimeout(() => {
                 banner.classList.remove('show');
+                container.querySelectorAll('.particle').forEach(p => p.remove());
                 setTimeout(() => { banner.style.display = 'none'; isAlertActive = false; processAlertQueue(); }, 400);
             }, delay);
         }
@@ -863,7 +892,6 @@
             }
         }
 
-        // ====================== ZONA ======================
         const image = document.getElementById('circleWarningImage');
         const progressBar = document.getElementById('progressBarOverlay');
         const countdown = document.getElementById('countdown');
@@ -907,112 +935,13 @@
             image.style.opacity = '0'; progressBar.style.opacity = '0'; countdown.textContent = '20';
         }
 
-        // ====================== INICIALIZACIÓN ======================
-        const killInterval = setInterval(fetchKillInfo, 2000); fetchKillInfo();
-        const eliminationInterval = setInterval(processEliminationsFromAllInfo, 3000); processEliminationsFromAllInfo();
-
-        if (!DEBUG_MODE) {
-            setInterval(async () => {
-                try {
-                    const snapshot = CURRENT_SNAPSHOT; if (!snapshot) return;
-                    const allinfo = snapshot.allinfo || {}, circleinfo = snapshot.circleinfo;
-                    const gameId = snapshot.GameID, finishedStartTime = Number(snapshot.FinishedStartTime || 0);
-                    if (gameId && currentGameIdZona !== gameId) { currentGameIdZona = gameId; isGameFinished = false; stopCircleAnimation(); }
-                    if (finishedStartTime !== 0) { isGameFinished = true; stopCircleAnimation(); return; }
-                    const teamInfoList = allinfo.TeamInfoList || [];
-                    totalTeamsAlive = teamInfoList.filter(t => t.liveMemberNum > 0).length;
-                    if (isGameFinished) { stopCircleAnimation(); return; }
-                    if (!circleinfo) return;
-                    const circleIndex = parseInt(circleinfo.CircleIndex, 10);
-                    const maxTime = parseInt(circleinfo.MaxTime, 10);
-                    const counter = parseInt(circleinfo.Counter, 10);
-                    const countdownValue = Math.max(0, maxTime - counter);
-                    if (lastCircleIndex !== null && circleIndex !== lastCircleIndex) {
-                        if (isAnimating) stopCircleAnimation();
-                        lastCircleIndex = circleIndex; return;
-                    }
-                    lastCircleIndex = circleIndex;
-                    if (!isAnimating && countdownValue <= 20 && countdownValue > 0) {
-                        if (alertEnabled('zone')) startCircleAnimation();
-                    }
-                } catch (e) {}
-            }, 500);
-        }
-
-        if (!window.__snapshotLoopStarted) {
-            window.__snapshotLoopStarted = true;
-            setInterval(updateSnapshotLoop, 500);
-        }
-        updateSnapshotLoop();
-
-        if (!window.__primaryCheckStarted) {
-            window.__primaryCheckStarted = true;
-            PRIMARY_CHECK_INTERVAL = setInterval(checkPrimaryEndpoint, 10000);
-        }
-
-        // ====================== DEBUG MODE ======================
-        if (DEBUG_MODE) {
-            document.getElementById('debugPanel').style.display = 'block';
-            function updateCheckpointStats() {
-                const stats = getStorageStats();
-                const div = document.getElementById('checkpointStats');
-                if (div) div.innerHTML = `📦 ${stats.sizeKB}KB / ~45MB (${stats.percentUsed}%)<br>🎮 ${stats.count} partidas`;
-            }
-            setInterval(updateCheckpointStats, 2000); updateCheckpointStats();
-
-            document.getElementById('testFirstKill').addEventListener('click', () => {
-                if (!alertEnabled('firstKill')) return;
-                enqueueAlert('firstKillBanner', 'JugadorPrueba (TEAM3)', 5000, '../assets/logos/001.png');
-                firstKillShown = true;
-            });
-            document.getElementById('testGrenadeKill').addEventListener('click', () => {
-                if (!alertEnabled('firstGrenade')) return;
-                enqueueAlert('firstGrenadeKillBanner', 'JugadorPrueba (TEAM3)', 5000, '../assets/logos/002.png');
-                firstGrenadeKillShown = true;
-            });
-            document.getElementById('testElimination').addEventListener('click', () => {
-                if (!alertEnabled('teamEliminated')) return;
-                enqueueAlert('eliminationBanner', '#6 Team13', 4000, '../assets/logos/003.png', getEliminationMessage());
-            });
-            document.getElementById('testCircle').addEventListener('click', () => {
-                if (!alertEnabled('zone')) return;
-                isAnimating ? stopCircleAnimation() : startCircleAnimation();
-            });
-            document.getElementById('hideAllBanners').addEventListener('click', () => {
-                alertQueue.length = 0; isAlertActive = false;
-                document.querySelectorAll('.banner').forEach(b => { b.classList.remove('show'); setTimeout(() => b.style.display = 'none', 400); });
-                stopCircleAnimation();
-            });
-            document.getElementById('showCheckpoints').addEventListener('click', () => {
-                const checkpoints = loadAllCheckpoints();
-                console.table(checkpoints);
-                alert(`📋 Checkpoints guardados (${checkpoints.length}):\n` + checkpoints.map(c => `• ${c.gameId}: t=${c.lastKillTime}`).join('\n'));
-            });
-            document.getElementById('clearCheckpoints').addEventListener('click', () => {
-                if (confirm('¿Eliminar TODOS los checkpoints guardados?')) { clearAllCheckpoints(); updateCheckpointStats(); alert('🗑️ Storage limpiado correctamente'); }
-            });
-            document.getElementById('exportCheckpoints').addEventListener('click', () => {
-                const checkpoints = loadAllCheckpoints();
-                const dataStr = JSON.stringify(checkpoints, null, 2);
-                const dataBlob = new Blob([dataStr], {type: 'application/json'});
-                const url = URL.createObjectURL(dataBlob);
-                const link = document.createElement('a');
-                link.href = url; link.download = `srd_checkpoints_${new Date().toISOString().slice(0,10)}.json`;
-                link.click(); URL.revokeObjectURL(url);
-            });
-        }
-
-        // ================================================================
-        // POLLING DE COMANDOS REMOTOS
-        // ================================================================
-        const OVERLAY_COMMAND_ENDPOINT = "https://v2-api-production-db45.up.railway.app/overlaycommand";
         let lastCommandTimestamp = 0, overlayCommandPollingStarted = false, commandFetchInProgress = false;
 
         async function pollOverlayCommands() {
             if (commandFetchInProgress) return;
             commandFetchInProgress = true;
             try {
-                const response = await fetch(OVERLAY_COMMAND_ENDPOINT, { cache: "no-store" });
+                const response = await fetch(COMMAND_ENDPOINT, { cache: "no-store" });
                 if (!response.ok) return;
                 const cmd = await response.json();
                 if (!cmd || !cmd.timestamp || cmd.timestamp <= lastCommandTimestamp) return;
@@ -1028,13 +957,13 @@
         function handleCommand(cmd) {
             switch (cmd) {
                 case "firstKill": case "show_first_kill":
-                    if (alertEnabled('firstKill')) { enqueueAlert('firstKillBanner', 'JugadorPrueba (TEAM3)', 5000, '../assets/logos/001.png'); firstKillShown = true; }
+                    if (alertEnabled('firstKill')) { enqueueAlert('firstKillBanner', 'JugadorPrueba (TEAM3)', 5000, getTeamLogoPath('default')); firstKillShown = true; }
                     break;
                 case "firstGrenade": case "show_first_grenade":
-                    if (alertEnabled('firstGrenade')) { enqueueAlert('firstGrenadeKillBanner', 'JugadorPrueba (TEAM3)', 5000, '../assets/logos/002.png'); firstGrenadeKillShown = true; }
+                    if (alertEnabled('firstGrenade')) { enqueueAlert('firstGrenadeKillBanner', 'JugadorPrueba (TEAM3)', 5000, getTeamLogoPath('default')); firstGrenadeKillShown = true; }
                     break;
                 case "teamEliminated": case "show_team_eliminated":
-                    if (alertEnabled('teamEliminated')) { enqueueAlert('eliminationBanner', '#6 Team13', 4000, '../assets/logos/003.png', getEliminationMessage()); }
+                    if (alertEnabled('teamEliminated')) { enqueueAlert('eliminationBanner', '#6 Team13', 4000, getTeamLogoPath('default'), getEliminationMessage()); }
                     break;
                 case "zone": case "show_zone":
                     if (alertEnabled('zone')) isAnimating ? stopCircleAnimation() : startCircleAnimation();
@@ -1056,7 +985,111 @@
             setInterval(pollOverlayCommands, 500);
         }
 
-        window.addEventListener('load', startOverlayCommandPolling);
+        let killInterval, eliminationInterval;
+
+        async function startAllSystems() {
+            await loadEventConfig();
+            updateEliminationTitle();
+
+            killInterval = setInterval(fetchKillInfo, 2000);
+            fetchKillInfo();
+            eliminationInterval = setInterval(processEliminationsFromAllInfo, 3000);
+            processEliminationsFromAllInfo();
+
+            if (!DEBUG_MODE) {
+                setInterval(async () => {
+                    try {
+                        const snapshot = CURRENT_SNAPSHOT; if (!snapshot) return;
+                        const allinfo = snapshot.allinfo || {}, circleinfo = snapshot.circleinfo;
+                        const gameId = snapshot.GameID, finishedStartTime = Number(snapshot.FinishedStartTime || 0);
+                        if (gameId && currentGameIdZona !== gameId) { currentGameIdZona = gameId; isGameFinished = false; stopCircleAnimation(); }
+                        if (finishedStartTime !== 0) { isGameFinished = true; stopCircleAnimation(); return; }
+                        const teamInfoList = allinfo.TeamInfoList || [];
+                        totalTeamsAlive = teamInfoList.filter(t => t.liveMemberNum > 0).length;
+                        if (isGameFinished) { stopCircleAnimation(); return; }
+                        if (!circleinfo) return;
+                        const circleIndex = parseInt(circleinfo.CircleIndex, 10);
+                        const maxTime = parseInt(circleinfo.MaxTime, 10);
+                        const counter = parseInt(circleinfo.Counter, 10);
+                        const countdownValue = Math.max(0, maxTime - counter);
+                        if (lastCircleIndex !== null && circleIndex !== lastCircleIndex) {
+                            if (isAnimating) stopCircleAnimation();
+                            lastCircleIndex = circleIndex; return;
+                        }
+                        lastCircleIndex = circleIndex;
+                        if (!isAnimating && countdownValue <= 20 && countdownValue > 0) {
+                            if (alertEnabled('zone')) startCircleAnimation();
+                        }
+                    } catch (e) {}
+                }, 500);
+            }
+
+            if (!window.__snapshotLoopStarted) {
+                window.__snapshotLoopStarted = true;
+                setInterval(updateSnapshotLoop, 500);
+            }
+            updateSnapshotLoop();
+
+            if (!window.__primaryCheckStarted) {
+                window.__primaryCheckStarted = true;
+                PRIMARY_CHECK_INTERVAL = setInterval(checkPrimaryEndpoint, 10000);
+            }
+
+            startOverlayCommandPolling();
+
+            if (DEBUG_MODE) {
+                document.getElementById('debugPanel').style.display = 'block';
+                function updateCheckpointStats() {
+                    const stats = getStorageStats();
+                    const div = document.getElementById('checkpointStats');
+                    if (div) div.innerHTML = `📦 ${stats.sizeKB}KB / ~45MB (${stats.percentUsed}%)<br>🎮 ${stats.count} partidas`;
+                }
+                setInterval(updateCheckpointStats, 2000); updateCheckpointStats();
+
+                document.getElementById('testFirstKill').addEventListener('click', () => {
+                    if (!alertEnabled('firstKill')) return;
+                    enqueueAlert('firstKillBanner', 'JugadorPrueba (TEAM3)', 5000, getTeamLogoPath('default'));
+                    firstKillShown = true;
+                });
+                document.getElementById('testGrenadeKill').addEventListener('click', () => {
+                    if (!alertEnabled('firstGrenade')) return;
+                    enqueueAlert('firstGrenadeKillBanner', 'JugadorPrueba (TEAM3)', 5000, getTeamLogoPath('default'));
+                    firstGrenadeKillShown = true;
+                });
+                document.getElementById('testElimination').addEventListener('click', () => {
+                    if (!alertEnabled('teamEliminated')) return;
+                    enqueueAlert('eliminationBanner', '#6 Team13', 4000, getTeamLogoPath('default'), getEliminationMessage());
+                });
+                document.getElementById('testCircle').addEventListener('click', () => {
+                    if (!alertEnabled('zone')) return;
+                    isAnimating ? stopCircleAnimation() : startCircleAnimation();
+                });
+                document.getElementById('hideAllBanners').addEventListener('click', () => {
+                    alertQueue.length = 0; isAlertActive = false;
+                    document.querySelectorAll('.banner').forEach(b => { b.classList.remove('show'); setTimeout(() => b.style.display = 'none', 400); });
+                    stopCircleAnimation();
+                });
+                document.getElementById('showCheckpoints').addEventListener('click', () => {
+                    const checkpoints = loadAllCheckpoints();
+                    console.table(checkpoints);
+                    alert(`📋 Checkpoints guardados (${checkpoints.length}):\n` + checkpoints.map(c => `• ${c.gameId}: t=${c.lastKillTime}`).join('\n'));
+                });
+                document.getElementById('clearCheckpoints').addEventListener('click', () => {
+                    if (confirm('¿Eliminar TODOS los checkpoints guardados?')) { clearAllCheckpoints(); updateCheckpointStats(); alert('🗑️ Storage limpiado correctamente'); }
+                });
+                document.getElementById('exportCheckpoints').addEventListener('click', () => {
+                    const checkpoints = loadAllCheckpoints();
+                    const dataStr = JSON.stringify(checkpoints, null, 2);
+                    const dataBlob = new Blob([dataStr], {type: 'application/json'});
+                    const url = URL.createObjectURL(dataBlob);
+                    const link = document.createElement('a');
+                    link.href = url; link.download = `srd_checkpoints_${new Date().toISOString().slice(0,10)}.json`;
+                    link.click(); URL.revokeObjectURL(url);
+                });
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', startAllSystems);
     </script>
 </body>
 </html>
