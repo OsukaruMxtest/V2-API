@@ -298,8 +298,11 @@
         const EVENT_DATE = "__EVENT_DATE__";
         const IS_EVENT_OVERLAY = location.pathname.includes('/eventos/');
 
-        // Base de logos: siempre absoluta /logos/ (funciona con servidor)
-        const LOGO_BASE = '../logos/';
+        // Base de logos: resolución segura con fallback a Railway cuando no hay APP_CONFIG
+        const LOGO_BASE = (
+            window.APP_CONFIG?.resolveAsset?.('/logos/', true) ||
+            'https://v2-api-production-db45.up.railway.app/logos/'
+        ).replace(/\/?$/, '/');
 
         // Cache y mapeos
         const _webmCache = new Map();
@@ -342,7 +345,7 @@
                                     else if (teamInfo.slot && !isNaN(parseInt(teamInfo.slot))) numericId = parseInt(teamInfo.slot);
                                     else if (teamInfo.teamNo && !isNaN(parseInt(teamInfo.teamNo))) numericId = parseInt(teamInfo.teamNo);
                                     
-                                    const teamKey = teamInfo.teamKey || teamInfo.teamId || String(numericId || '').padStart(3, '0');
+                                    const teamKey = teamInfo.teamKey || teamInfo.teamId || (numericId !== null ? 'T-' + String(numericId).padStart(4, '0') : '');
                                     if (numericId !== null && numericId >= 1 && numericId <= 50) {
                                         teamIdToKeyMap.set(numericId, teamKey);
                                         if (teamInfo.teamName) customTeamNameMap.set(numericId, teamInfo.teamName);
@@ -390,7 +393,7 @@
                     if (resolved) return resolved;
                 } catch (e) { /* fallback */ }
             }
-            return String(teamId).padStart(3, '0');
+            return 'T-' + String(teamId).padStart(4, '0');
         }
 
         // ============================================================
@@ -455,7 +458,7 @@
         function teamLogoHTML(teamId, teamName, cssClass, styleAttr) {
             let teamKey = teamIdToKeyMap.get(teamId);
             if (!teamKey && teamName && teamNameToKeyMap.has(teamName)) teamKey = teamNameToKeyMap.get(teamName);
-            if (!teamKey) teamKey = String(teamId).padStart(3, '0');
+            if (!teamKey) teamKey = 'T-' + String(teamId).padStart(4, '0');
             const cls   = cssClass  ? ` class="${cssClass}"`  : '';
             const style = styleAttr ? ` style="${styleAttr}"` : '';
             const useWebm = _webmCache.get(teamKey) === true;
