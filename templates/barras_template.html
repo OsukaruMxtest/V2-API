@@ -341,16 +341,35 @@
                             if (config.teams && typeof config.teams === 'object') {
                                 for (const [key, teamInfo] of Object.entries(config.teams)) {
                                     let numericId = null;
-                                    if (!isNaN(parseInt(key))) numericId = parseInt(key);
-                                    else if (teamInfo.slot && !isNaN(parseInt(teamInfo.slot))) numericId = parseInt(teamInfo.slot);
-                                    else if (teamInfo.teamNo && !isNaN(parseInt(teamInfo.teamNo))) numericId = parseInt(teamInfo.teamNo);
+                                    // Acepta teamId como número o string numérico
+                                    const parsedTeamId = Number(teamInfo.teamId);
+                                    if (!isNaN(parsedTeamId) && parsedTeamId >= 1 && parsedTeamId <= 50) {
+                                        numericId = parsedTeamId;
+                                    } else if (teamInfo.slot && !isNaN(parseInt(teamInfo.slot))) {
+                                        numericId = parseInt(teamInfo.slot);
+                                    } else if (teamInfo.teamNo && !isNaN(parseInt(teamInfo.teamNo))) {
+                                        numericId = parseInt(teamInfo.teamNo);
+                                    } else if (!Array.isArray(config.teams) && !isNaN(parseInt(key))) {
+                                        numericId = parseInt(key);
+                                    }
                                     
-                                    const teamKey = teamInfo.teamKey || teamInfo.teamId || (numericId !== null ? 'T-' + String(numericId).padStart(4, '0') : '');
+                                    // Compatibilidad con configs antiguos donde teamId puede ser "T-0003"
+                                    const legacyTeamKey = /^T-\d{4}$/i.test(String(teamInfo.teamId || ''))
+                                        ? String(teamInfo.teamId)
+                                        : '';
+                                    
+                                    const teamKey =
+                                        teamInfo.teamKey ||
+                                        teamInfo.teamManagerId ||
+                                        teamInfo.logoKey ||
+                                        legacyTeamKey ||
+                                        (numericId !== null ? 'T-' + String(numericId).padStart(4, '0') : '');
+                                    
                                     if (numericId !== null && numericId >= 1 && numericId <= 50) {
                                         teamIdToKeyMap.set(numericId, teamKey);
                                         if (teamInfo.teamName) customTeamNameMap.set(numericId, teamInfo.teamName);
                                     }
-                                    if (teamInfo.teamName) {
+                                    if (teamInfo.teamName && teamKey) {
                                         teamNameToKeyMap.set(teamInfo.teamName, teamKey);
                                     }
                                 }
