@@ -1169,6 +1169,7 @@ function renderTemplate(template, replacements) {
 
 function buildEventConfig(data) {
     const { eventName, eventDate, teams } = data;
+
     const config = {
         eventName,
         eventDate,
@@ -1177,17 +1178,28 @@ function buildEventConfig(data) {
     };
 
     if (Array.isArray(teams)) {
-        config.teams = teams.map(team => ({
-            teamId: team.teamId || '',
-            teamName: team.teamName || '',
-            logoPng: team.logoPng || '',
-            logoWebm: team.logoWebm || '',
-            flagPng: team.flagPng || '',
-            flagWebm: team.flagWebm || '',
-            primaryColor: team.primaryColor || '',
-            secondaryColor: team.secondaryColor || '',
-            tag: team.tag || ''
-        }));
+        config.teams = teams.map(team => {
+            const numericTeamId = Number(team.teamId);
+
+            const teamKey =
+                team.teamKey ||
+                team.teamManagerId ||
+                team.logoKey ||
+                (/^T-\d{4}$/i.test(String(team.teamId || '')) ? String(team.teamId) : '');
+
+            return {
+                teamId: !isNaN(numericTeamId) ? numericTeamId : '',
+                teamKey: teamKey,
+                teamName: team.teamName || '',
+                logoPng: team.logoPng || '',
+                logoWebm: team.logoWebm || '',
+                flagPng: team.flagPng || '',
+                flagWebm: team.flagWebm || '',
+                primaryColor: team.primaryColor || '',
+                secondaryColor: team.secondaryColor || '',
+                tag: team.tag || ''
+            };
+        });
     }
 
     return config;
@@ -1228,7 +1240,7 @@ function buildOverlayReplacements(data, slots) {
         const teamsArray = data.teams || [];
         slots.forEach((slot, index) => {
             const pos = index + 1;
-            const team = teamsArray.find(t => t.teamId === slot.teamId);
+            const team = teamsArray.find(t => Number(t.teamId) === Number(slot.teamId));
             if (team) {
                 replacements[`TEAM_${pos}_NAME`] = team.teamName || '';
                 replacements[`TEAM_${pos}_TAG`] = team.tag || '';
