@@ -46,7 +46,7 @@
             overflow: hidden;
             position: relative;
         }
-        .overlay-content {
+        .t {
             position: absolute; top: 600px; right: 0px;
             transform: translateY(-50%);
             width: auto; max-width: var(--table-max-width);
@@ -55,7 +55,7 @@
             align-items: center; gap: 8px; padding: 10px;
             background: transparent; visibility: visible; opacity: 1;
         }
-        .overlay-content.large-table-bg { background-image: none; }
+        .t.large-table-bg { background-image: none; }
         .table-container {
             width: 100%; max-width: 100%;
             font-size: var(--table-font-size);
@@ -111,8 +111,8 @@
             contain: layout style;
         }
         #tableBody .t-row { overflow: hidden; }
-        .overlay-content.large-table-bg #tableBody .t-row:nth-child(odd) { background-color: rgba(34, 65, 242, 0.45); }
-        .overlay-content.large-table-bg #tableBody .t-row:nth-child(even) { background-color: rgba(22, 158, 242, 0.35); }
+        .overlay-content.large-table-bg #tableBody .t-row:nth-child(odd) { background-color: rgba(34, 65, 242); }
+        .overlay-content.large-table-bg #tableBody .t-row:nth-child(even) { background-color: rgba(22, 158, 242); }
         .overlay-content:not(.large-table-bg) #tableBody .t-row { background-color: transparent; }
         .t-row.eliminado { opacity: 0.45; color: #aaa; }
         .col-pp, .col-total { transition: none; }
