@@ -69,30 +69,48 @@
             align-items: stretch;
         }
         .t-cell {
-            padding: 4px 4px 4px 2px; text-align: center;
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            padding: 4px 4px 4px 2px;
+            text-align: center;
+            white-space: nowrap;
+            overflow: visible;
+            text-overflow: ellipsis;
             font-size: var(--table-font-size);
-            display: flex; align-items: center; justify-content: center;
-            min-width: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: auto;
         }
         .t-equipo { text-align: left; justify-content: flex-start; padding-left: 6px; }
         .t-name, .t-equipo {
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-            min-width: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            min-width: auto;
         }
         .t-puntos, .t-elim, .t-pp {
-            flex-shrink: 0; overflow: visible !important;
-            min-width: 0;
+            flex-shrink: 0;
+            overflow: visible !important;
+            min-width: max-content;
             padding-inline: 8px;
         }
         #tableHeader { background-color: #1D1A73 !important; color: var(--header-text-color); font-weight: 700; overflow: visible; transition: grid-template-columns 0.2s ease; }
         #tableHeader .t-cell {
-            white-space: nowrap; flex-wrap: nowrap; line-height: normal;
-            display: flex; align-items: center; justify-content: center;
-            min-width: auto; min-height: 36px; height: 36px;
+            white-space: nowrap;
+            flex-wrap: nowrap;
+            line-height: normal;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: auto;
+            min-height: 36px;
+            height: 36px;
             padding-inline: 6px;
+            contain: layout style;
         }
-        #tableBody .t-row { overflow: visible; }
+        #tableBody .t-cell {
+            contain: layout style;
+        }
+        #tableBody .t-row { overflow: hidden; }
         .overlay-content.large-table-bg #tableBody .t-row:nth-child(odd) { background-color: rgba(34, 65, 242, 0.45); }
         .overlay-content.large-table-bg #tableBody .t-row:nth-child(even) { background-color: rgba(22, 158, 242, 0.35); }
         .overlay-content:not(.large-table-bg) #tableBody .t-row { background-color: transparent; }
@@ -265,6 +283,19 @@
         #tableBody .t-row .t-logo img, #tableBody .t-row .t-logo video, #tableBody .t-row .t-name, #tableBody .t-row .t-pos, #tableBody .t-row .t-health .health-bar-container, #tableBody .t-row .t-puntos, #tableBody .t-row .t-pp, #tableBody .t-row .t-elim { position: relative; z-index: 2; }
         #tableBody .t-row .t-pos { color: black !important; font-weight: bold; text-shadow: none; }
         #tableBody .t-row .t-name, #tableBody .t-row .t-puntos, #tableBody .t-row .t-pp, #tableBody .t-row .t-elim { text-shadow: 1px 1px 0px rgba(0,0,0,0.6); font-weight: bold; }
+
+        /* Refuerzo visual: fondos de filas con ruta absoluta para eventos y sin filtros/blends */
+        #tableBody .t-row .t-pos,
+        #tableBody .t-row .t-logo,
+        #tableBody .t-row .t-name,
+        #tableBody .t-row .t-health,
+        #tableBody .t-row .t-puntos,
+        #tableBody .t-row .t-pp,
+        #tableBody .t-row .t-elim {
+            filter: none !important;
+            opacity: 1 !important;
+            background-blend-mode: normal !important;
+        }
     </style>
 
 </head>
