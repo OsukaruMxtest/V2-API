@@ -6,7 +6,7 @@
 <title>EVENT PACKAGE BUILDER - Esports Overlay System</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-<script src="../shared/app_config.js"></script>
+<script src="/shared/app_config.js"></script>
 <style>
 /* ============================================
    RESET & BASE (estilos originales, sin cambios)
@@ -274,7 +274,6 @@ color:var(--text-secondary);display:flex;align-items:center;gap:6px
 .btn-purple{background:var(--locked);color:#fff}
 .btn-purple:hover{background:#6d28d9;box-shadow:0 4px 12px rgba(124,58,237,0.3)}
 </style>
-<base target="_blank">
 </head>
 <body>
 
@@ -539,16 +538,9 @@ async function safeFetch(url, options, fallbackMsg) {
   }
   try {
     var res = await fetch(url, options);
-    if (!res.ok) {
-      var statusText = res.status + ' ' + (res.statusText || '');
-      throw new Error((fallbackMsg || 'Error HTTP') + ' (' + statusText + ')');
-    }
     return res;
   } catch (err) {
     console.error(err);
-    if (err.message && (err.message.includes('HTTP') || err.message.includes('Endpoint'))) {
-      throw err;
-    }
     var msg = (
       err?.message?.includes('Failed to fetch') ||
       err?.message?.includes('NetworkError')
@@ -577,6 +569,7 @@ let colorEditSlotIndex = null;
 function showToast(msg, type) {
   type = type || 'success';
   var container = $('toastContainer');
+  if (!container) return;
   var toast = document.createElement('div');
   toast.className = 'toast ' + type;
   var icons = {
@@ -591,7 +584,7 @@ function showToast(msg, type) {
 
 function escapeHtml(text) {
   var div = document.createElement('div');
-  div.textContent = text;
+  div.textContent = text == null ? '' : String(text);
   return div.innerHTML;
 }
 
@@ -619,7 +612,11 @@ function hideLoading() { $('loadingOverlay').classList.remove('active'); }
 function isTeamUsed(teamId) { return slots.some(function(s) { return s && s.id === teamId; }); }
 
 function sanitizeFileName(name) {
-  return (name || '').trim().replace(/[^a-zA-Z0_\-]/g, '').slice(0, 64);
+  return (name || '').trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '').replace(/_{2,}/g, '_').slice(0, 64);
+}
+
+function sanitizeIniValue(value) {
+  return String(value || '').replace(/[(),\n\r]/g, ' ').trim();
 }
 
 /* ============================================
@@ -711,9 +708,13 @@ async function loadTeams() {
         teamName: t.teamName,
         tag: t.tag,
         logoPng: t.logoPng ? resolveMedia(t.logoPng) : null,
+        logoPngRaw: t.logoPng || null,
         logoWebm: t.logoWebm ? resolveMedia(t.logoWebm) : null,
+        logoWebmRaw: t.logoWebm || null,
         flagPng: t.flagPng ? resolveMedia(t.flagPng) : null,
+        flagPngRaw: t.flagPng || null,
         flagWebm: t.flagWebm ? resolveMedia(t.flagWebm) : null,
+        flagWebmRaw: t.flagWebm || null,
         primaryColor: t.primaryColor,
         secondaryColor: t.secondaryColor,
         createdAt: t.createdAt
@@ -747,9 +748,9 @@ function renderTeamsList() {
     return;
   }
   list.innerHTML = filteredTeams.map(function(t) {
-    var hasLogo = !!(t.logoPng || t.logoWebm);
+    var hasLogo = !!(t.logoWebm || t.logoPng);
     return '<div class="team-item' + (!hasLogo ? ' disabled' : '') + '" draggable="' + hasLogo + '" data-id="' + t.id + '" ondragstart="handleDragStart(event,\'' + t.id + '\')" ondragend="handleDragEnd(event)"' + (!hasLogo ? '' : ' onclick="addToFirstSlot(\'' + t.id + '\')"') + '>' +
-      '<img class="item-logo" src="' + (t.logoPng || t.logoWebm || '') + '" alt="" onerror="this.style.display=\'none\'">' +
+      '<img class="item-logo" src="' + (t.logoWebm || t.logoPng || '') + '" alt="" onerror="this.style.display=\'none\'">' +
       '<div class="item-info"><div class="item-name">' + escapeHtml(t.teamName) + '</div><div class="item-tag">' + escapeHtml(t.teamId) + (t.tag ? ' | ' + escapeHtml(t.tag) : '') + '</div></div>' +
       '<div class="item-colors"><div class="dot" style="background:' + (t.primaryColor || '#3b82f6') + '"></div><div class="dot" style="background:' + (t.secondaryColor || '#64748b') + '"></div></div>' +
       (hasLogo ? '<button class="add-btn" onclick="event.stopPropagation();addToFirstSlot(\'' + t.id + '\')">+</button>' : '') +
@@ -761,9 +762,9 @@ function renderTeamsList() {
 function filterTeams() { renderTeamsList(); }
 
 function updateStats() {
-  var pngTeams = allTeams.filter(function(t) { return t.logoPng; }).length;
+  var usableTeams = allTeams.filter(function(t) { return t.logoPng || t.logoWebm; }).length;
   var usedCount = slots.filter(function(s) { return s !== null; }).length;
-  $('teamStats').textContent = (pngTeams - usedCount) + ' disponibles | ' + usedCount + ' en slots | ' + lockedSlots.size + ' bloqueados';
+  $('teamStats').textContent = (usableTeams - usedCount) + ' disponibles | ' + usedCount + ' en slots | ' + lockedSlots.size + ' bloqueados';
   $('slotCount').textContent = usedCount + ' / 50';
 }
 
@@ -800,7 +801,7 @@ function renderSlots() {
       var primaryRing = activeType === 'primary' ? '0 0 0 3px var(--accent)' : '0 0 0 1px var(--border)';
       var secondaryRing = activeType === 'secondary' ? '0 0 0 3px var(--accent)' : '0 0 0 1px var(--border)';
       slotEl.innerHTML = '<span class="slot-number">' + padSlot(slotNum) + '</span>' +
-        '<img class="slot-logo" src="' + team.logoPng + '" alt="" onerror="this.style.display=\'none\'">' +
+        '<img class="slot-logo" src="' + (team.logoWebm || team.logoPng || '') + '" alt="" onerror="this.style.display=\'none\'">' +
         '<div class="slot-name" style="background:' + activeColor + ';color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.6);">' + escapeHtml(team.teamName) + '</div>' +
         '<div class="slot-tag">' + escapeHtml(generateTag(team)) + '</div>' +
         '<div style="display:flex;gap:6px;justify-content:center;align-items:center;margin-top:1px;">' +
@@ -861,7 +862,7 @@ function confirmClearAllSlots() {
 }
 
 function autoFill() {
-  var pngTeams = allTeams.filter(function(t) { return t.logoPng && !isTeamUsed(t.id); });
+  var pngTeams = allTeams.filter(function(t) { return (t.logoPng || t.logoWebm) && !isTeamUsed(t.id); });
   var emptyIndices = [];
   for (var i = 0; i < 50; i++) { if (slots[i] === null && !lockedSlots.has(i)) emptyIndices.push(i); }
   if (emptyIndices.length === 0) { showToast('No hay slots vacíos disponibles', 'warning'); return; }
@@ -891,7 +892,7 @@ function openColorModal(index) {
   $('editSecondaryHex').value = (team.secondaryColor || '#64748B').toUpperCase();
   $('primaryAutoBadge').style.display = override.useSecondary ? 'inline-block' : 'none';
   $('secondaryAutoBadge').style.display = 'none';
-  $('colorPreviewLogo').src = team.logoPng;
+  $('colorPreviewLogo').src = team.logoPng || '';
   updateColorPreview();
   $('colorModal').classList.add('active');
 }
@@ -982,12 +983,14 @@ function generateINI() {
   var used = [];
   for (var i = 0; i < 50; i++) { if (slots[i] !== null) used.push({ team: slots[i], index: i }); }
   if (used.length === 0) { showToast('No hay equipos en los slots', 'error'); return; }
+  var missingPng = used.filter(function(x) { return !x.team.logoPng; });
+  if (missingPng.length > 0) { showToast('Hay ' + missingPng.length + ' equipo(s) sin PNG. No se puede generar el INI.', 'error'); return; }
   var today = new Date().toISOString().split('T')[0];
   var ini = '[/Script/ShadowTrackerExtra.FCustomTeamLogoAndColor]\nEnableTeamLogoAndColor=1\n';
   for (var u = 0; u < used.length; u++) {
     var slotNum = used[u].index + 1, team = used[u].team;
     var pc = getSlotPrimaryColor(used[u].index), rgba = hexToRGBA(pc);
-    ini += 'TeamLogoAndColor=(TeamNo=' + slotNum + ',TeamName=' + team.teamName + ',TeamLogoPath=C:/logo/' + padSlot(slotNum) + '.png,KillInfoPath=C:/logo/' + padSlot(slotNum) + '.png,TeamColorR=' + rgba.r + ',TeamColorG=' + rgba.g + ',TeamColorB=' + rgba.b + ',TeamColorA=255,PlayerColorR=0,PlayerColorG=255,PlayerColorB=0,PlayerColorA=255,CornerMarkPath=,fin)\n';
+    ini += 'TeamLogoAndColor=(TeamNo=' + slotNum + ',TeamName=' + sanitizeIniValue(team.teamName) + ',TeamLogoPath=C:/logo/' + padSlot(slotNum) + '.png,KillInfoPath=C:/logo/' + padSlot(slotNum) + '.png,TeamColorR=' + rgba.r + ',TeamColorG=' + rgba.g + ',TeamColorB=' + rgba.b + ',TeamColorA=255,PlayerColorR=0,PlayerColorG=255,PlayerColorB=0,PlayerColorA=255,CornerMarkPath=,fin)\n';
   }
   ini += '\n[/Script/ShadowTrackerExtra.FCustomTeammatePic]\nEnableTeammatePic=1\nTeammatePic=(PlayerName=,PicPath=,fin)\n\n# TAGS:\n';
   for (var u2 = 0; u2 < used.length; u2++) { ini += '# ' + (used[u2].index + 1) + ': ' + generateTag(used[u2].team) + '\n'; }
@@ -1012,7 +1015,7 @@ async function resizeImage(srcUrl, size) {
       var ctx = canvas.getContext('2d');
       ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
       ctx.clearRect(0, 0, size, size); ctx.drawImage(img, 0, 0, size, size);
-      canvas.toBlob(function(blob) { resolve(blob); }, 'image/png');
+      canvas.toBlob(function(blob) { if (!blob) return reject(new Error('No se pudo generar PNG')); resolve(blob); }, 'image/png');
     };
     img.onerror = reject;
     img.src = srcUrl;
@@ -1022,6 +1025,8 @@ async function exportPNGs() {
   var used = [];
   for (var i = 0; i < 50; i++) { if (slots[i] !== null) used.push({ team: slots[i], index: i }); }
   if (used.length === 0) { showToast('No hay equipos en los slots', 'error'); return; }
+  var missingPng = used.filter(function(x) { return !x.team.logoPng; });
+  if (missingPng.length > 0) { showToast('Hay ' + missingPng.length + ' equipo(s) sin PNG. No se pueden exportar PNGs.', 'error'); return; }
   showLoading('Generando PNGs (' + (used.length * 4) + ' archivos)...');
   try {
     for (var u = 0; u < used.length; u++) {
@@ -1039,6 +1044,8 @@ async function exportAllZIP() {
   var used = [];
   for (var i = 0; i < 50; i++) { if (slots[i] !== null) used.push({ team: slots[i], index: i }); }
   if (used.length === 0) { showToast('No hay equipos en los slots', 'error'); return; }
+  var missingPng = used.filter(function(x) { return !x.team.logoPng; });
+  if (missingPng.length > 0) { showToast('Hay ' + missingPng.length + ' equipo(s) sin PNG. No se puede generar el ZIP.', 'error'); return; }
   showLoading('Generando ZIP con ' + used.length + ' equipos...');
   try {
     var zip = new JSZip(), today = new Date().toISOString().split('T')[0];
@@ -1046,7 +1053,7 @@ async function exportAllZIP() {
     for (var u = 0; u < used.length; u++) {
       var slotNum = used[u].index + 1, team = used[u].team;
       var pc = getSlotPrimaryColor(used[u].index), rgba = hexToRGBA(pc);
-      ini += 'TeamLogoAndColor=(TeamNo=' + slotNum + ',TeamName=' + team.teamName + ',TeamLogoPath=C:/logo/' + padSlot(slotNum) + '.png,KillInfoPath=C:/logo/' + padSlot(slotNum) + '.png,TeamColorR=' + rgba.r + ',TeamColorG=' + rgba.g + ',TeamColorB=' + rgba.b + ',TeamColorA=255,PlayerColorR=0,PlayerColorG=255,PlayerColorB=0,PlayerColorA=255,CornerMarkPath=,fin)\n';
+      ini += 'TeamLogoAndColor=(TeamNo=' + slotNum + ',TeamName=' + sanitizeIniValue(team.teamName) + ',TeamLogoPath=C:/logo/' + padSlot(slotNum) + '.png,KillInfoPath=C:/logo/' + padSlot(slotNum) + '.png,TeamColorR=' + rgba.r + ',TeamColorG=' + rgba.g + ',TeamColorB=' + rgba.b + ',TeamColorA=255,PlayerColorR=0,PlayerColorG=255,PlayerColorB=0,PlayerColorA=255,CornerMarkPath=,fin)\n';
     }
     ini += '\n[/Script/ShadowTrackerExtra.FCustomTeammatePic]\nEnableTeammatePic=1\nTeammatePic=(PlayerName=,PicPath=,fin)\n\n# TAGS:\n';
     for (var u2 = 0; u2 < used.length; u2++) { ini += '# ' + (used[u2].index + 1) + ': ' + generateTag(used[u2].team) + '\n'; }
@@ -1101,8 +1108,8 @@ function copyEventLinks() {
 
 function validateEventPackage(name) {
   var errors = [];
-  if (!name || name.length === 0) errors.push('Nombre del evento vacío');
-  if (/[^a-zA-Z0-9_\-]/.test($('evtName').value.trim())) errors.push('El nombre contiene caracteres inválidos (solo letras, números, guiones y guiones bajos)');
+  var sanitized = sanitizeFileName(name);
+  if (!sanitized || sanitized.length === 0) errors.push('Nombre del evento vacío o inválido');
   var used = [];
   for (var i = 0; i < 50; i++) { if (slots[i] !== null) used.push(i); }
   if (used.length === 0) errors.push('No hay equipos en los slots');
@@ -1130,10 +1137,10 @@ function buildEventPackagePayload() {
         teamKey: team.teamId,
         teamName: team.teamName,
         tag: team.tag,
-        logoPng: team.logoPng,
-        logoWebm: team.logoWebm,
-        flagPng: team.flagPng,
-        flagWebm: team.flagWebm,
+        logoPng: team.logoPngRaw || team.logoPng,
+        logoWebm: team.logoWebmRaw || team.logoWebm,
+        flagPng: team.flagPngRaw || team.flagPng,
+        flagWebm: team.flagWebmRaw || team.flagWebm,
         primaryColor: getSlotPrimaryColor(i),
         secondaryColor: getSlotColor(i, 'secondary')
       });
@@ -1148,7 +1155,8 @@ function buildEventPackagePayload() {
     eventName: getEventName(),
     eventDate: $('evtDate').value || new Date().toISOString().split('T')[0],
     slots: slotsOrder,
-    teams: slotsData
+    teams: slotsData,
+    createResultsFolders: true
   };
 }
 
@@ -1168,6 +1176,7 @@ async function generateEventPackage() {
 
   try {
     var payload = buildEventPackagePayload();
+    console.log('[EVENT PACKAGE] payload slots:', payload.slots);
     console.log('[EVENT PACKAGE] payload teams:', payload.teams);
     var endpoint = apiEndpoint('genEventPkg');
     if (!endpoint) {

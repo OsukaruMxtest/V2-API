@@ -84,7 +84,6 @@
             flex-shrink: 0; overflow: visible !important;
             min-width: 0;
             padding-inline: 8px;
-            outline: 1px solid rgba(255,0,0,0.25);
         }
         #tableHeader { background-color: #1D1A73 !important; color: var(--header-text-color); font-weight: 700; overflow: visible; transition: grid-template-columns 0.2s ease; }
         #tableHeader .t-cell {
@@ -94,9 +93,9 @@
             padding-inline: 6px;
         }
         #tableBody .t-row { overflow: visible; }
-        .overlay-content.large-table-bg #tableBody .t-row:nth-child(odd) { background-color: rgba(34, 65, 242, 0.45); }
-        .overlay-content.large-table-bg #tableBody .t-row:nth-child(even) { background-color: rgba(22, 158, 242, 0.35); }
-        .overlay-content:not(.large-table-bg) #tableBody .t-row { background-color: transparent; }
+        .overlay-content.large-table-bg #tableBody .t-row:nth-child(odd) { background-color: rgb(34, 65, 242); }
+        .overlay-content.large-table-bg #tableBody .t-row:nth-child(even) { background-color: rgb(22, 158, 242); }
+        .overlay-content:not(.large-table-bg) #tableBody .t-row { background-color: rgb(34, 65, 242); }
         .t-row.eliminado { opacity: 0.45; color: #aaa; }
         .col-pp, .col-total { transition: none; }
         @keyframes slideInRight { 0% { opacity: 0; transform: translateX(110%); } 100% { opacity: 1; transform: translateX(0); } }
@@ -267,6 +266,7 @@
         #tableBody .t-row .t-pos { color: black !important; font-weight: bold; text-shadow: none; }
         #tableBody .t-row .t-name, #tableBody .t-row .t-puntos, #tableBody .t-row .t-pp, #tableBody .t-row .t-elim { text-shadow: 1px 1px 0px rgba(0,0,0,0.6); font-weight: bold; }
     </style>
+
 </head>
 <body>
     <div class="overlay-content" id="mainOverlay">
@@ -404,15 +404,24 @@
         // Resolución de teamKey usando config, nombre y team_resolver.js
         // ============================================================
         async function resolveTeamKey(teamId, teamName) {
-            if (teamIdToKeyMap.has(teamId)) return teamIdToKeyMap.get(teamId);
-            if (teamName && teamNameToKeyMap.has(teamName)) return teamNameToKeyMap.get(teamName);
+            const numericTeamId = Number(teamId);
+
+            if (!isNaN(numericTeamId) && teamIdToKeyMap.has(numericTeamId)) {
+                return teamIdToKeyMap.get(numericTeamId);
+            }
+
+            if (teamName && teamNameToKeyMap.has(teamName)) {
+                return teamNameToKeyMap.get(teamName);
+            }
+
             if (window.TeamResolver && typeof window.TeamResolver.resolveTeamKey === 'function') {
                 try {
                     const resolved = await window.TeamResolver.resolveTeamKey(teamId, teamName);
                     if (resolved) return resolved;
-                } catch (e) { /* fallback */ }
+                } catch (e) {}
             }
-            return 'T-' + String(teamId).padStart(4, '0');
+
+            return 'T-' + String(numericTeamId || teamId).padStart(4, '0');
         }
 
         // ============================================================
@@ -427,63 +436,44 @@
             if (!parent) return;
             if (element.dataset.requestId != requestId) return;
 
-            const useWebm = _webmCache.get(teamKey) === true;
-            if (useWebm) {
-                if (element.tagName === 'VIDEO') {
-                    const src = element.querySelector('source');
-                    if (src) { src.src = LOGO_BASE + teamKey + '.webm'; element.load(); }
-                } else {
-                    const v = document.createElement('video');
-                    v.className = element.className;
-                    v.dataset.teamId = teamKey;
-                    v.dataset.requestId = requestId;
-                    v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true;
-                    const s = document.createElement('source');
-                    s.src = LOGO_BASE + teamKey + '.webm'; s.type = 'video/webm';
-                    v.appendChild(s);
-                    v.onerror = () => {
-                        if (v.dataset.requestId != requestId) return;
-                        const fb = document.createElement('img');
-                        fb.className = v.className;
-                        fb.dataset.teamId = teamKey;
-                        fb.dataset.requestId = requestId;
-                        fb.src = LOGO_BASE + 'default.png';
-                        v.replaceWith(fb);
-                    };
-                    parent.replaceChild(v, element);
-                }
-            } else {
-                if (element.tagName === 'IMG') {
-                    element.src = LOGO_BASE + teamKey + '.png';
-                    element.onerror = () => {
-                        if (element.dataset.requestId != requestId) return;
-                        element.src = LOGO_BASE + 'default.png';
-                    };
-                } else {
-                    const img = document.createElement('img');
-                    img.className = element.className;
-                    img.dataset.teamId = teamKey;
-                    img.dataset.requestId = requestId;
-                    img.src = LOGO_BASE + teamKey + '.png';
-                    img.onerror = () => {
-                        if (img.dataset.requestId != requestId) return;
-                        img.src = LOGO_BASE + 'default.png';
-                    };
-                    parent.replaceChild(img, element);
-                }
+            if (element.tagName === 'IMG') {
+                element.src = LOGO_BASE + teamKey + '.png';
+                element.onerror = () => {
+                    if (element.dataset.requestId != requestId) return;
+                    element.src = LOGO_BASE + 'default.png';
+                };
+                return;
             }
+
+            const img = document.createElement('img');
+            img.className = element.className;
+            img.dataset.teamId = teamKey;
+            img.dataset.requestId = requestId;
+            img.src = LOGO_BASE + teamKey + '.png';
+            img.onerror = () => {
+                if (img.dataset.requestId != requestId) return;
+                img.src = LOGO_BASE + 'default.png';
+            };
+            parent.replaceChild(img, element);
         }
 
         function teamLogoHTML(teamId, teamName, cssClass, styleAttr) {
-            let teamKey = teamIdToKeyMap.get(teamId);
-            if (!teamKey && teamName && teamNameToKeyMap.has(teamName)) teamKey = teamNameToKeyMap.get(teamName);
-            if (!teamKey) teamKey = 'T-' + String(teamId).padStart(4, '0');
-            const cls   = cssClass  ? ` class="${cssClass}"`  : '';
-            const style = styleAttr ? ` style="${styleAttr}"` : '';
-            const useWebm = _webmCache.get(teamKey) === true;
-            if (useWebm) {
-                return `<video${cls}${style} autoplay loop muted playsinline><source src="${LOGO_BASE}${teamKey}.webm" type="video/webm"></video>`;
+            const numericTeamId = Number(teamId);
+
+            let teamKey = !isNaN(numericTeamId)
+                ? teamIdToKeyMap.get(numericTeamId)
+                : null;
+
+            if (!teamKey && teamName && teamNameToKeyMap.has(teamName)) {
+                teamKey = teamNameToKeyMap.get(teamName);
             }
+
+            if (!teamKey) {
+                teamKey = 'T-' + String(numericTeamId || teamId).padStart(4, '0');
+            }
+
+            const cls = cssClass ? ` class="${cssClass}"` : '';
+            const style = styleAttr ? ` style="${styleAttr}"` : '';
             return `<img${cls}${style} src="${LOGO_BASE}${teamKey}.png" onerror="this.src='${LOGO_BASE}default.png'">`;
         }
 
@@ -503,55 +493,50 @@
         }
 
         async function resolveMediaAsset(baseName) {
-            const webmSrc = LOGO_BASE + baseName + '.webm';
-            const pngSrc  = LOGO_BASE + baseName + '.png';
-            if (await assetExists(webmSrc)) return { type: 'video', src: webmSrc };
-            if (await assetExists(pngSrc))  return { type: 'image', src: pngSrc };
+            const pngSrc = LOGO_BASE + baseName + '.png';
+            if (await assetExists(pngSrc)) return { type: 'image', src: pngSrc };
             return { type: 'image', src: LOGO_BASE + 'default.png' };
         }
 
         function createMediaElement(asset, extraClass) {
-            if (asset.type === 'video') {
-                const v = document.createElement('video');
-                if (extraClass) v.className = extraClass;
-                v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true;
-                const s = document.createElement('source');
-                s.src = asset.src; s.type = 'video/webm';
-                v.appendChild(s);
-                const pngFallback = asset.src.replace(/\.webm$/i, '.png');
-                v.onerror = () => {
-                    const fb = document.createElement('img');
-                    if (extraClass) fb.className = extraClass;
-                    const pngKnownMissing = _assetExistsCache.get(pngFallback) === false;
-                    fb.src = pngKnownMissing ? LOGO_BASE + 'default.png' : pngFallback;
-                    fb.onerror = () => { fb.src = LOGO_BASE + 'default.png'; };
-                    v.replaceWith(fb);
-                };
-                return v;
-            } else {
-                const img = document.createElement('img');
-                if (extraClass) img.className = extraClass;
-                img.src = asset.src;
-                img.onerror = () => { img.src = LOGO_BASE + 'default.png'; };
-                return img;
-            }
+            const img = document.createElement('img');
+            if (extraClass) img.className = extraClass;
+            img.src = asset.src;
+            img.onerror = () => { img.src = LOGO_BASE + 'default.png'; };
+            return img;
+        }
+
+        let logoColumnShowingFlag = false;
+        let logoColumnFlipInterval = null;
+
+        function applyGlobalLogoColumnState() {
+            document.querySelectorAll('#tableBody .logo-flip-card').forEach(card => {
+                card.classList.toggle('show-flag', logoColumnShowingFlag);
+            });
+        }
+
+        function startGlobalLogoColumnFlip() {
+            if (logoColumnFlipInterval) return;
+            logoColumnFlipInterval = setInterval(() => {
+                logoColumnShowingFlag = !logoColumnShowingFlag;
+                applyGlobalLogoColumnState();
+            }, 5000);
         }
 
         function cleanupLogoFlip(container) {
-            if (container && container._logoFlipInterval) {
-                clearInterval(container._logoFlipInterval);
-                container._logoFlipInterval = null;
-            }
+            if (!container) return;
+            container.dataset.flipReady = '0';
         }
 
         async function setTeamLogoFlip(container, teamId, teamName) {
             if (!container) return;
             const teamKey = await resolveTeamKey(teamId, teamName);
-            if (container.dataset.teamKey === teamKey && container.dataset.flipReady === '1') return;
+            if (container.dataset.teamKey === teamKey && container.dataset.flipReady === '1') {
+                applyGlobalLogoColumnState();
+                return;
+            }
             container.dataset.teamKey = teamKey;
             container.dataset.flipReady = '0';
-
-            cleanupLogoFlip(container);
 
             const [logoAsset, flagAsset] = await Promise.all([
                 resolveMediaAsset(teamKey),
@@ -561,6 +546,7 @@
             container.innerHTML = '';
             const card = document.createElement('div');
             card.className = 'logo-flip-card';
+            card.classList.toggle('show-flag', logoColumnShowingFlag);
 
             const logoFace = document.createElement('div');
             logoFace.className = 'logo-flip-face logo-face';
@@ -575,16 +561,16 @@
             container.appendChild(card);
 
             container.dataset.flipReady = '1';
-
-            let showingFlag = false;
-            container._logoFlipInterval = setInterval(() => {
-                showingFlag = !showingFlag;
-                card.classList.toggle('show-flag', showingFlag);
-            }, 5000);
+            startGlobalLogoColumnFlip();
         }
 
         function getCustomTeamName(teamId) {
-            if (customTeamNameMap.has(teamId)) return customTeamNameMap.get(teamId);
+            const numericTeamId = Number(teamId);
+
+            if (!isNaN(numericTeamId) && customTeamNameMap.has(numericTeamId)) {
+                return customTeamNameMap.get(numericTeamId);
+            }
+
             return null;
         }
 
@@ -1116,7 +1102,6 @@
                     const hideWithAnim = () => { if (_prevTableVisible === true) { _prevTableVisible = false; animateTableHide(); } else { mainOverlay.style.visibility = 'hidden'; } };
                     if (currentState === OverlayState.HIDDEN) { finalContainer.style.visibility = 'hidden'; finalContainer.style.opacity = '0'; hideWithAnim(); return; }
                     if (!barsEnabled) { finalContainer.style.visibility = 'hidden'; finalContainer.style.opacity = '0'; hideWithAnim(); return; }
-                    // NUEVA COMPROBACIÓN: si hideAll puso externalVisible=false y estamos en modo tabla, ocultar
                     if (!externalVisible && currentState === OverlayState.TABLE) {
                         finalContainer.style.visibility = 'hidden';
                         finalContainer.style.opacity = '0';

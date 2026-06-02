@@ -500,13 +500,13 @@
             filter: brightness(1.2) contrast(1.3);
         }
     </style>
-<base target="_blank">
-<base target="_blank">
-<base target="_blank">
+    <script src="/shared/event_runtime.js"></script>
+    <script src="/shared/result_exporter.js"></script>
+    <script src="/shared/result_sorting.js"></script>
 </head>
 <body>
-    <div class="debug-indicator">MODO DEBUG</div>
-    <div id="debugControls">
+    <div class="debug-indicator" style="display:none;">MODO DEBUG</div>
+    <div id="debugControls" style="display:none;">
         <button class="debug-btn" onclick="debugShowWinner()">Ganador</button>
         <button class="debug-btn" onclick="debugShowMVP()">MVP</button>
         <button class="debug-btn" onclick="debugShowMVT()">MVT</button>
@@ -1097,7 +1097,13 @@
             });
         },
         preloadLogo(teamId) {
-            const teamKey = overlayState.teamIdToKeyMap.get(teamId) || `team_${teamId}`;
+            const numericTeamId = Number(teamId);
+            const teamKey =
+                (!isNaN(numericTeamId)
+                    ? overlayState.teamIdToKeyMap.get(numericTeamId) || overlayState.teamIdToKeyMap.get(String(numericTeamId))
+                    : null) ||
+                overlayState.teamIdToKeyMap.get(String(teamId)) ||
+                `T-${String(!isNaN(numericTeamId) ? numericTeamId : teamId).padStart(4, '0')}`;
             const url = `/logos/${teamKey}.png`;
             return this.preloadImage(url);
         },
@@ -1838,51 +1844,113 @@
     // 25. TEAM RESOLVER ENGINE
     // ============================================================
     async function loadEventConfig() {
-        try {
-            const configUrl = `/eventos/${SAFE_EVENT_NAME}/event_config.json`;
-            const res = await createAbortableFetch(configUrl, {}, 5000);
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const config = await res.json();
-            overlayState.eventConfig = config;
-            if (config.teams && Array.isArray(config.teams)) {
-                config.teams.forEach(team => {
-                    const teamId = team.teamId;
-                    const teamKey = team.teamKey || `team_${teamId}`;
-                    overlayState.teamIdToKeyMap.set(teamId, teamKey);
-                    overlayState.teamIdToNameMap.set(teamId, team.name || team.teamName);
-                });
+        const possiblePaths = [
+            './event_config.json',
+            `/eventos/${SAFE_EVENT_NAME}/event_config.json`
+        ];
+
+        for (const configUrl of possiblePaths) {
+            try {
+                const res = await createAbortableFetch(configUrl, {}, 5000);
+                if (!res.ok) continue;
+
+                const config = await res.json();
+                overlayState.eventConfig = config;
+                overlayState.teamIdToKeyMap.clear();
+                overlayState.teamIdToNameMap.clear();
+
+                if (config.teams && Array.isArray(config.teams)) {
+                    config.teams.forEach(team => {
+                        const numericTeamId = Number(team.teamId);
+                        if (isNaN(numericTeamId) || numericTeamId <= 0) return;
+
+                        const teamKey =
+                            team.teamKey ||
+                            team.teamManagerId ||
+                            team.logoKey ||
+                            (/^T-\d{4}$/i.test(String(team.teamId || ''))
+                                ? String(team.teamId)
+                                : `T-${String(numericTeamId).padStart(4, '0')}`);
+
+                        const teamName = team.teamName || team.name || `Equipo ${numericTeamId}`;
+
+                        overlayState.teamIdToKeyMap.set(numericTeamId, teamKey);
+                        overlayState.teamIdToKeyMap.set(String(numericTeamId), teamKey);
+
+                        overlayState.teamIdToNameMap.set(numericTeamId, teamName);
+                        overlayState.teamIdToNameMap.set(String(numericTeamId), teamName);
+                    });
+                }
+
+                DebugEngine.log('NETWORK', 'Event config loaded:', configUrl);
+                return;
+            } catch (err) {
+                DebugEngine.warn('NETWORK', 'Failed to load event_config.json from:', configUrl, err);
             }
-            DebugEngine.log('NETWORK', 'Event config loaded');
-        } catch (err) {
-            DebugEngine.warn('NETWORK', 'Failed to load event_config.json, using fallback', err);
-            overlayState.eventConfig = { teams: [] };
         }
+
+        overlayState.eventConfig = { teams: [] };
     }
 
     async function resolveTeamLogoUrl(teamId) {
-        const teamKey = overlayState.teamIdToKeyMap.get(teamId) || `team_${teamId}`;
+        const numericTeamId = Number(teamId);
+
+        const teamKey =
+            (!isNaN(numericTeamId)
+                ? overlayState.teamIdToKeyMap.get(numericTeamId) || overlayState.teamIdToKeyMap.get(String(numericTeamId))
+                : null) ||
+            overlayState.teamIdToKeyMap.get(String(teamId)) ||
+            `T-${String(!isNaN(numericTeamId) ? numericTeamId : teamId).padStart(4, '0')}`;
+
         let resolvedUrl = null;
+
         if (typeof resolveTeamKeyViaResolver === 'function') {
             try {
                 resolvedUrl = await resolveTeamKeyViaResolver(teamId, teamKey);
-            } catch(e) { DebugEngine.warn('RENDER', 'Team resolver error:', e); }
+            } catch(e) {
+                DebugEngine.warn('RENDER', 'Team resolver error:', e);
+            }
         }
+
         if (!resolvedUrl) resolvedUrl = `/logos/${teamKey}.png`;
+
         const cached = overlayState.logoLoadedCache.get(resolvedUrl);
         if (cached === false) return overlayState.defaultLogo;
         if (cached === true) return resolvedUrl;
+
         const img = new Image();
         const finalUrl = resolvedUrl;
+
         await new Promise((resolve) => {
-            img.onload = () => { overlayState.logoLoadedCache.set(finalUrl, true); resolve(); };
-            img.onerror = () => { overlayState.logoLoadedCache.set(finalUrl, false); resolve(); };
+            img.onload = () => {
+                overlayState.logoLoadedCache.set(finalUrl, true);
+                resolve();
+            };
+            img.onerror = () => {
+                overlayState.logoLoadedCache.set(finalUrl, false);
+                resolve();
+            };
             img.src = finalUrl;
         });
-        return overlayState.logoLoadedCache.get(resolvedUrl) === false ? overlayState.defaultLogo : resolvedUrl;
+
+        return overlayState.logoLoadedCache.get(resolvedUrl) === false
+            ? overlayState.defaultLogo
+            : resolvedUrl;
     }
 
     function getTeamDisplayName(teamId, fallbackName) {
-        return overlayState.teamIdToNameMap.get(teamId) || fallbackName || `Equipo ${teamId}`;
+        const numericTeamId = Number(teamId);
+
+        if (!isNaN(numericTeamId)) {
+            return (
+                overlayState.teamIdToNameMap.get(numericTeamId) ||
+                overlayState.teamIdToNameMap.get(String(numericTeamId)) ||
+                fallbackName ||
+                `Equipo ${numericTeamId}`
+            );
+        }
+
+        return overlayState.teamIdToNameMap.get(String(teamId)) || fallbackName || `Equipo ${teamId}`;
     }
 
     // ============================================================
@@ -2070,6 +2138,96 @@
         return pointsTable[rank] || 0;
     }
 
+    function getNormalizedScoring() {
+        let raw = null;
+        if (window.OverlayConfig && typeof window.OverlayConfig.get === 'function') {
+            try { raw = window.OverlayConfig.get().scoring; } catch (e) { /* ignore */ }
+        }
+        if (!raw) {
+            raw = overlayState.eventConfig?.scoring || null;
+        }
+        if (!raw) return null;
+
+        const normalized = {
+            positionPoints: null,
+            pePerKill: 1,
+            bonusEnabled: false,
+            bonusPoints: {}
+        };
+
+        // Normalize position points (pp, positionPoints, killPoints as object)
+        if (raw.pp !== undefined) normalized.positionPoints = raw.pp;
+        else if (raw.positionPoints !== undefined) normalized.positionPoints = raw.positionPoints;
+        else if (raw.killPoints !== undefined && typeof raw.killPoints === 'object') normalized.positionPoints = raw.killPoints;
+
+        // Normalize PE per kill (pePerKill, or killPoints as number)
+        if (raw.pePerKill !== undefined) normalized.pePerKill = Number(raw.pePerKill);
+        else if (raw.killPoints !== undefined && typeof raw.killPoints === 'number') normalized.pePerKill = Number(raw.killPoints);
+
+        // Normalize bonus enabled
+        normalized.bonusEnabled = raw.bonusEnabled === true;
+
+        // Normalize bonus points mapping both old and new key names
+        const bonusSrc = raw.bonus || raw.bonusPoints || {};
+        const bonusMap = {
+            wwcd: ['wwcd', 'winner', 'win'],
+            grenadeKill: ['grenade', 'grenadeKill', 'nade'],
+            vehicleKill: ['vehicle', 'vehicleKill', 'car', 'vehiculo'],
+            molotovKill: ['molotov', 'molotovKill', 'molly'],
+            meleeKill: ['melee', 'meleeKill', 'cuerpo'],
+            maxMarchDistance: ['distance', 'maxMarchDistance', 'marchDistance', 'distancia'],
+            maxKillDistance: ['killDist', 'maxKillDistance', 'snipe', 'killDistance']
+        };
+        for (const [dest, keys] of Object.entries(bonusMap)) {
+            for (const key of keys) {
+                if (bonusSrc[key] !== undefined) {
+                    normalized.bonusPoints[dest] = Number(bonusSrc[key]);
+                    break;
+                }
+            }
+        }
+
+        normalized.pp = normalized.positionPoints;
+        normalized.bonus = normalized.bonusPoints;
+        return normalized;
+    }
+
+    function getScoringConfig() {
+        return getNormalizedScoring();
+    }
+    function getPositionPointsDynamic(rank) {
+        const scoring = getNormalizedScoring();
+        if (scoring && scoring.positionPoints) {
+            const val = scoring.positionPoints[rank];
+            if (val !== undefined) return Number(val);
+            if (Array.isArray(scoring.positionPoints) && rank > 0 && rank <= scoring.positionPoints.length) {
+                return Number(scoring.positionPoints[rank - 1]);
+            }
+        }
+        return getPositionPoints(rank);
+    }
+    function getPePerKill() {
+        const scoring = getNormalizedScoring();
+        return Number(scoring?.pePerKill ?? 1);
+    }
+    function isBonusEnabled() {
+        const scoring = getNormalizedScoring();
+        return scoring?.bonusEnabled === true;
+    }
+    function getBonusPoints() {
+        const scoring = getNormalizedScoring();
+        return scoring?.bonusPoints || {};
+    }
+    function resolveTeamKey(teamId) {
+        const numericTeamId = Number(teamId);
+        if (!isNaN(numericTeamId)) {
+            return overlayState.teamIdToKeyMap.get(numericTeamId) ||
+                   overlayState.teamIdToKeyMap.get(String(numericTeamId)) ||
+                   `T-${String(numericTeamId).padStart(4, '0')}`;
+        }
+        return overlayState.teamIdToKeyMap.get(String(teamId)) || `T-${String(teamId).padStart(4, '0')}`;
+    }
+
     function groupByTeam(players) {
         const teamsMap = new Map();
         players.forEach(p => {
@@ -2097,8 +2255,8 @@
         });
         teamsMap.forEach(team => {
             const rank = team.bestRank;
-            team.pp = getPositionPoints(rank);
-            team.pe = team.totalKills;
+            team.pp = getPositionPointsDynamic(rank);
+            team.pe = team.totalKills * getPePerKill();
             team.totalPoints = team.pp + team.pe;
             team.wwcd = (rank === 1);
         });
@@ -2114,11 +2272,12 @@
                 teamsMap.set(teamId, {
                     teamId: teamId,
                     teamName: getTeamDisplayName(teamId, p.teamName),
+                    teamKey: resolveTeamKey(teamId),
                     players: [],
                     totalKills: 0,
                     totalDamage: 0,
                     bestRank: p.rank || 999,
-                    pp: 0, pe: 0, totalPoints: 0, wwcd: false,
+                    pp: 0, pe: 0, bonusTotal: 0, totalPoints: 0, wwcd: false,
                     grenadeKills: 0, vehicleKills: 0, molotovKills: 0,
                     totalMarchDistance: 0, maxKillDistance: 0
                 });
@@ -2146,15 +2305,37 @@
                 }
             });
         }
-        teamsMap.forEach(team => {
+        const teams = Array.from(teamsMap.values());
+        const maxMarch = Math.max(...teams.map(t => t.totalMarchDistance), 0);
+        const maxDistance = Math.max(...teams.map(t => t.maxKillDistance), 0);
+        const pePerKill = getPePerKill();
+        const bonusEnabled = isBonusEnabled();
+        const bonusPoints = getBonusPoints();
+        const isUniqueMax = (val, max, field) => val === max && max > 0 && teams.filter(t => t[field] === max).length === 1;
+        teams.forEach(team => {
             team.molotovKills = teamMolotov.get(team.teamId) || 0;
-            const rank = team.bestRank;
-            team.pp = getPositionPoints(rank);
-            team.pe = team.totalKills;
-            team.totalPoints = team.pp + team.pe;
-            team.wwcd = (rank === 1);
+            team.wwcd = (team.bestRank === 1);
+            team.rank = team.bestRank;
+            team.position = team.bestRank;
+            team.pp = getPositionPointsDynamic(team.bestRank);
+            team.pe = team.totalKills * pePerKill;
+            let bonusTotal = 0;
+            if (bonusEnabled) {
+                if (team.wwcd && bonusPoints.wwcd) bonusTotal += Number(bonusPoints.wwcd);
+                if (team.grenadeKills > 0 && bonusPoints.grenadeKill) bonusTotal += team.grenadeKills * Number(bonusPoints.grenadeKill);
+                if (team.vehicleKills > 0 && bonusPoints.vehicleKill) bonusTotal += team.vehicleKills * Number(bonusPoints.vehicleKill);
+                if (team.molotovKills > 0 && bonusPoints.molotovKill) bonusTotal += team.molotovKills * Number(bonusPoints.molotovKill);
+                if (isUniqueMax(team.totalMarchDistance, maxMarch, 'totalMarchDistance') && bonusPoints.maxMarchDistance) {
+                    bonusTotal += Number(bonusPoints.maxMarchDistance);
+                }
+                if (isUniqueMax(team.maxKillDistance, maxDistance, 'maxKillDistance') && bonusPoints.maxKillDistance) {
+                    bonusTotal += Number(bonusPoints.maxKillDistance);
+                }
+            }
+            team.bonusTotal = bonusTotal;
+            team.totalPoints = team.pp + team.pe + bonusTotal;
         });
-        return Array.from(teamsMap.values());
+        return teams;
     }
 
     // ============================================================
@@ -2287,7 +2468,7 @@
         const nameEl = safeGetElement(nameElId);
         if (nameEl) {
             nameEl.style.transform = '';
-            nameEl.textContent = escapeHtml(name);
+            nameEl.textContent = name || '';
         }
         const logoUrl = await resolveTeamLogoUrl(teamId);
         const logoEl = safeGetElement(logoElId);
@@ -2327,7 +2508,7 @@
         const winnerNameEl = safeGetElement('winnerName');
         if (winnerNameEl) {
             winnerNameEl.style.transform = '';
-            winnerNameEl.textContent = escapeHtml(winnerTeam.teamName);
+            winnerNameEl.textContent = winnerTeam.teamName || '';
         }
         const logoUrl = await resolveTeamLogoUrl(winnerTeam.teamId);
         safeSetSrc('winnerLogo', logoUrl);
@@ -2343,10 +2524,12 @@
     async function showMVP() {
         const players = overlayState.lastPlayerStats.length ? overlayState.lastPlayerStats : [];
         if (!players.length) return;
-        const sorted = [...players].sort((a, b) =>
-            b.killNum !== a.killNum ? b.killNum - a.killNum :
-            (b.damage || 0) - (a.damage || 0) || (a.rank || 999) - (b.rank || 999)
-        );
+        const sorted = window.ResultSorting && typeof window.ResultSorting.sortPlayersMVP === 'function'
+            ? window.ResultSorting.sortPlayersMVP(players)
+            : [...players].sort((a, b) =>
+                b.killNum !== a.killNum ? b.killNum - a.killNum :
+                (b.damage || 0) - (a.damage || 0) || (a.rank || 999) - (b.rank || 999)
+            );
         const mvp = sorted[0];
         const currentToken = overlayState.sequenceToken;
 
@@ -2388,11 +2571,14 @@
     async function showMVT() {
         const players = overlayState.lastPlayerStats.length ? overlayState.lastPlayerStats : [];
         if (!players.length) return;
-        const teams = groupByTeam(players);
-        const sortedTeams = [...teams].sort((a, b) =>
-            b.totalPoints !== a.totalPoints ? b.totalPoints - a.totalPoints :
-            (b.wwcd ? 1 : 0) - (a.wwcd ? 1 : 0) || b.pp - a.pp || b.pe - a.pe || a.bestRank - b.bestRank
-        );
+        const teams = computeTeamStatsWithBonuses(players, overlayState.lastKillInfo || []);
+        const sortedTeams = window.ResultSorting && typeof window.ResultSorting.sortTeamsMVT === 'function'
+            ? window.ResultSorting.sortTeamsMVT(teams)
+            : [...teams].sort((a, b) =>
+                (b.totalKills || 0) - (a.totalKills || 0) ||
+                (b.totalDamage || 0) - (a.totalDamage || 0) ||
+                (a.bestRank || 999) - (b.bestRank || 999)
+            );
         const bestTeam = sortedTeams[0];
         if (!bestTeam) return;
         const currentToken = overlayState.sequenceToken;
@@ -2437,6 +2623,7 @@
     }
 
     function buildBonusHtml(team, maxGrenade, maxVehicle, maxMolotov, maxMarch, maxDistance, allTeams) {
+        if (!isBonusEnabled()) return '';
         const isUnique = (val, max, field) => val === max && max > 0 && allTeams.filter(t => t[field] === max).length === 1;
         let html = '<div class="team-bonus">';
         if (team.wwcd) html += `<div class="bonus-item"><img src="/shared/images/winner_icon.png" alt="winner" title="WWCD"><span>x1</span></div>`;
@@ -2452,12 +2639,14 @@
     async function populateClassification() {
         const perfStart = PerfEngine.start('populateClassification');
         const players = overlayState.lastPlayerStats.length ? overlayState.lastPlayerStats : [];
-        const killinfo = [];
+        const killinfo = overlayState.lastKillInfo || [];
         let teams = computeTeamStatsWithBonuses(players, killinfo);
-        const sortedTeams = [...teams].sort((a, b) =>
-            b.totalPoints !== a.totalPoints ? b.totalPoints - a.totalPoints :
-            (b.wwcd ? 1 : 0) - (a.wwcd ? 1 : 0) || b.pp - a.pp || b.pe - a.pe || a.bestRank - b.bestRank
-        );
+        const sortedTeams = window.ResultSorting && typeof window.ResultSorting.sortTeamsGeneral === 'function'
+            ? window.ResultSorting.sortTeamsGeneral(teams)
+            : [...teams].sort((a, b) =>
+                b.totalPoints !== a.totalPoints ? b.totalPoints - a.totalPoints :
+                (b.wwcd ? 1 : 0) - (a.wwcd ? 1 : 0) || b.pp - a.pp || b.pe - a.pe || a.bestRank - b.bestRank
+            );
         const top16 = sortedTeams.slice(0, 16);
         const group1 = top16.slice(0, 8), group2 = top16.slice(8, 16);
         const maxGrenade = Math.max(...teams.map(t => t.grenadeKills), 0);
@@ -2541,7 +2730,7 @@
         const token = generateSequenceToken();
         overlayState.sequenceActive = true;
         overlayState.lastPlayerStats = players;
-        const teams = groupByTeam(players);
+        const teams = computeTeamStatsWithBonuses(players, overlayState.lastKillInfo || []);
         showWinner(teams);
         addTimeout(() => {
             if (!isCurrentSequence(token) || !overlayState.sequenceActive) return;
@@ -2578,12 +2767,13 @@
         if (retryCount >= SEQUENCE_CONFIG.winnerStabilizationRetries) {
             overlayState.winnerStabilizing = false;
             startFinalSequence(initialPlayers);
+            overlayState.sequenceLocked = false;
             return;
         }
         await delay(SEQUENCE_CONFIG.winnerStabilizationDelay);
         const newData = await fetchSnapshot();
         if (!newData) {
-            stabilizeWinnerAndStartSequence(initialPlayers, retryCount + 1);
+            await stabilizeWinnerAndStartSequence(initialPlayers, retryCount + 1);
             return;
         }
         const newPlayers = (newData.allinfo?.TotalPlayerList || [])
@@ -2592,25 +2782,48 @@
                 uId: p.uId, playerName: p.playerName, rank: p.rank || 999,
                 killNum: p.killNum || 0, damage: p.damage || 0,
                 teamId: p.teamId, teamName: p.teamName,
+                teamKey: resolveTeamKey(p.teamId),
                 killNumByGrenade: p.killNumByGrenade ?? 0,
                 killNumInVehicle: p.killNumInVehicle ?? 0,
                 marchDistance: p.marchDistance ?? 0,
                 maxKillDistance: p.maxKillDistance ?? 0
             }));
         if (simpleHash(initialPlayers) === simpleHash(newPlayers)) {
+            const killinfo = overlayState.pendingMatchMeta?.killinfo || [];
+            const results = computeMatchResults(newPlayers, killinfo);
+            const exportPayload = {
+                ...overlayState.pendingMatchMeta,
+                winner: results.winner,
+                mvp: results.mvp,
+                mvt: results.mvt,
+                teams: results.teams,
+                players: results.players
+            };
+            overlayState.lastExportPayload = exportPayload;
+            try {
+                await exportMatchResultAuto(exportPayload);
+            } catch(e) {
+                DebugEngine.warn('EXPORT', 'Export failed, sequence continues:', e);
+            }
+            overlayState.pendingMatchMeta = null;
             overlayState.winnerStabilizing = false;
             overlayState.currentGameId = newData.allinfo?.GameID;
-            if (overlayState.currentGameId) {
-                await fetchWeaponDataForGame(newPlayers, overlayState.currentGameId);
+            try {
+                if (overlayState.currentGameId) {
+                    await fetchWeaponDataForGame(newPlayers, overlayState.currentGameId);
+                }
+            } catch(e) {
+                DebugEngine.warn('WEAPON', 'Weapon preload failed:', e);
             }
             startFinalSequence(newPlayers);
+            overlayState.sequenceLocked = false;
         } else {
-            stabilizeWinnerAndStartSequence(newPlayers, retryCount + 1);
+            await stabilizeWinnerAndStartSequence(newPlayers, retryCount + 1);
         }
     }
 
     // ============================================================
-    // 33. POLLING ENGINE (v3: usa IntervalEngine + sequence lock)
+    // 33. POLLING ENGINE (v3: sequence lock + backoff)
     // ============================================================
     async function fetchData() {
         if (!overlayState.pollingActive) return;
@@ -2621,16 +2834,25 @@
         const allinfo = data.allinfo || {};
         const finishedStartTime = Number(allinfo.FinishedStartTime || 0);
         const gameID = allinfo.GameID;
-        if (finishedStartTime > 0 && gameID !== overlayState.lastGameId) {
+        if (finishedStartTime > 0 && gameID !== overlayState.lastGameId && !(window.ResultExporter && window.ResultExporter.wasGameAlreadyExported(gameID))) {
             overlayState.sequenceLocked = true;
             overlayState.lastGameId = gameID;
             overlayState.isMatchFinished = true;
+            overlayState.pendingMatchMeta = {
+                gameId: gameID,
+                finishedStartTime: finishedStartTime,
+                gameStartTime: allinfo.GameStartTime || null,
+                matchNumber: allinfo.MatchNumber || allinfo.MatchID || overlayState.eventConfig?.currentMatch || null,
+                killinfo: allinfo.killinfo || allinfo.KillInfo || [],
+                rawSnapshot: data
+            };
+            overlayState.lastKillInfo = allinfo.killinfo || allinfo.KillInfo || [];
             const players = (allinfo.TotalPlayerList || [])
                 .filter(p => p.playerName?.trim())
                 .map(p => ({
                     uId: p.uId, playerName: p.playerName, rank: p.rank || 999,
                     killNum: p.killNum || 0, damage: p.damage || 0,
-                    teamId: p.teamId, teamName: p.teamName,
+                    teamId: p.teamId, teamName: p.teamName, teamKey: resolveTeamKey(p.teamId),
                     killNumByGrenade: p.killNumByGrenade ?? 0,
                     killNumInVehicle: p.killNumInVehicle ?? 0,
                     marchDistance: p.marchDistance ?? 0,
@@ -2639,7 +2861,6 @@
             overlayState.winnerStabilizing = true;
             activateAlerts();
             stabilizeWinnerAndStartSequence(players, 0);
-            overlayState.sequenceLocked = false;
         }
     }
 
@@ -2706,7 +2927,7 @@
     window.debugShowWinner = async () => {
         const players = getMockData();
         overlayState.lastPlayerStats = players;
-        const teams = groupByTeam(players);
+        const teams = computeTeamStatsWithBonuses(players, overlayState.lastKillInfo || []);
         showWinner(teams);
     };
     window.debugShowMVP = async () => {
@@ -2739,6 +2960,22 @@
     CommandEngine.register('hide_all', window.hideAllLayers);
     CommandEngine.register('simulate_match_end', window.debugSimulateMatchEnd);
 
+    window.retryExportMatchResult = async function() {
+        const payload = overlayState.lastExportPayload;
+        if (!payload || !payload.gameId) {
+            DebugEngine.warn('EXPORT', 'No hay payload de exportacion valido en memoria');
+            console.warn('[EXPORT] No hay resultado de partida valido en memoria para reexportar. Asegurate de que la partida haya terminado y se haya computado al menos una vez.');
+            return;
+        }
+        if (window.ResultExporter && window.ResultExporter.wasGameAlreadyExported(payload.gameId)) {
+            DebugEngine.log('EXPORT', 'Reintento bloqueado: GameID ya exportado ' + payload.gameId);
+            return;
+        }
+        DebugEngine.log('EXPORT', 'Reintentando exportacion manual para GameID:', payload.gameId);
+        await exportMatchResultAuto(payload);
+    };
+    CommandEngine.register('export_match_result', window.retryExportMatchResult);
+
     // ============================================================
     // 36. EVENT ENGINE (OverlayBus)
     // ============================================================
@@ -2764,6 +3001,64 @@
         });
         window.addEventListener('beforeunload', () => {
             SafeCleanupOrchestrator.destroyOverlayRuntime();
+        });
+    }
+
+
+    // ============================================================
+    // 37b. AUTO EXPORT ENGINE (match result persistence)
+    // ============================================================
+    function computeMatchResults(players, killinfo) {
+        const teams = computeTeamStatsWithBonuses(players, killinfo);
+        const winner = teams.find(t => t.wwcd) || null;
+        const mvp = window.ResultSorting && typeof window.ResultSorting.sortPlayersMVP === 'function'
+            ? window.ResultSorting.sortPlayersMVP(players)[0] || null
+            : [...players].sort((a, b) =>
+                (b.killNum || 0) - (a.killNum || 0) ||
+                (b.damage || 0) - (a.damage || 0) ||
+                (a.rank || 999) - (b.rank || 999)
+              )[0] || null;
+        const sortedTeams = window.ResultSorting && typeof window.ResultSorting.sortTeamsGeneral === 'function'
+            ? window.ResultSorting.sortTeamsGeneral(teams)
+            : [...teams].sort((a, b) =>
+                (b.totalPoints || 0) - (a.totalPoints || 0) ||
+                (b.wwcd ? 1 : 0) - (a.wwcd ? 1 : 0) ||
+                (b.pp || 0) - (a.pp || 0) ||
+                (b.pe || 0) - (a.pe || 0) ||
+                (a.bestRank || 999) - (b.bestRank || 999)
+              );
+        const mvt = window.ResultSorting && typeof window.ResultSorting.sortTeamsMVT === 'function'
+            ? window.ResultSorting.sortTeamsMVT(teams)[0] || null
+            : [...teams].sort((a, b) =>
+                (b.totalKills || 0) - (a.totalKills || 0) ||
+                (b.totalDamage || 0) - (a.totalDamage || 0) ||
+                (a.bestRank || 999) - (b.bestRank || 999)
+              )[0] || null;
+        return { winner, mvp, mvt, teams: sortedTeams, players };
+    }
+
+    async function exportMatchResultAuto(meta) {
+        if (!window.ResultExporter) return;
+        if (!meta || !meta.gameId) return;
+        if (window.ResultExporter.wasGameAlreadyExported(meta.gameId)) {
+            DebugEngine.log('EXPORT', 'Skip duplicate export for ' + meta.gameId);
+            return;
+        }
+        await window.ResultExporter.exportMatchResult({
+            eventName: window.EVENT_NAME,
+            safeEventName: window.SAFE_EVENT_NAME,
+            matchNumber: meta.matchNumber || undefined,
+            gameId: meta.gameId,
+            gameStartTime: meta.gameStartTime,
+            finishedStartTime: meta.finishedStartTime,
+            exportedAt: new Date().toISOString(),
+            scoringConfig: getNormalizedScoring() || overlayState.eventConfig?.scoring || null,
+            winner: meta.winner,
+            mvp: meta.mvp,
+            mvt: meta.mvt,
+            teams: meta.teams,
+            players: meta.players,
+            snapshot: meta.rawSnapshot
         });
     }
 

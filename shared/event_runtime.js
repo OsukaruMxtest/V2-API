@@ -10,7 +10,7 @@
  *   - Authority overlay management
  *   - Global scene state
  *
- * V1.3 — Vanilla ES6, zero dependencies, legacy-safe, hardened
+ * V1.4 — Added overlay_control storage keys (seqManualMode, dropExportEnabled, showUtilitiesTop3)
  * (c) 2025 PUBG Mobile Esports Engineering
  */
 
@@ -101,9 +101,46 @@
         configBroadcast: isModular ? 'overlayConfigBroadcast_' + eventId : 'overlayConfigBroadcast',
         manualCmd: isModular ? 'overlayManualCmd_' + eventId : 'overlay_manual_cmd',
         overlayState: isModular ? 'overlayState_' + eventId : 'overlayState',
-        heartbeat: isModular ? 'overlayHeartbeat_' + eventId : 'overlayHeartbeat'
+        heartbeat: isModular ? 'overlayHeartbeat_' + eventId : 'overlayHeartbeat',
+        lastExportedGameId: isModular ? 'overlayLastExportedGameId_' + eventId : 'overlayLastExportedGameId',
+        lastExportedMatchNumber: isModular ? 'overlayLastExportedMatchNumber_' + eventId : 'overlayLastExportedMatchNumber',
+        lastExportStatus: isModular ? 'overlayLastExportStatus_' + eventId : 'overlayLastExportStatus',
+        lastExportError: isModular ? 'overlayLastExportError_' + eventId : 'overlayLastExportError',
+        seqManualMode: isModular ? 'overlaySeqManualMode_' + eventId : 'overlaySeqManualMode',
+        dropExportEnabled: isModular ? 'overlayDropExportEnabled_' + eventId : 'overlayDropExportEnabled',
+        showUtilitiesTop3: isModular ? 'overlayShowUtilitiesTop3_' + eventId : 'overlayShowUtilitiesTop3',
+        debugMode: isModular ? 'overlayDebugMode_' + eventId : 'overlayDebugMode',
+        overlayConfigUpdate: isModular ? 'overlayConfigUpdate_' + eventId : 'overlayConfigUpdate',
+        zonesPrefix: isModular ? 'overlayZones_' + eventId : 'overlayZones',
+        dropsVisible: isModular ? 'overlayDropsVisible_' + eventId : 'overlayDropsVisible',
+        seqState: isModular ? 'overlaySeqState_' + eventId : 'overlaySeqState',
+        seqMode: isModular ? 'overlaySeqMode_' + eventId : 'overlaySeqMode',
+        scoringConfig: isModular ? 'overlayScoringConfig_' + eventId : 'overlayScoringConfig',
+        obsBlockedList: isModular ? 'overlayObsBlockedList_' + eventId : 'overlayObsBlockedList',
+        lastExportAttemptGameId: isModular ? 'overlayLastExportAttemptGameId_' + eventId : 'overlayLastExportAttemptGameId'
     };
     Object.freeze(storageKeys);
+
+    // ============================================================
+    // 6. ENDPOINTS CENTRALIZADOS
+    // ============================================================
+    const endpoints = {
+        saveMatchResult: function() {
+            if (!eventId) {
+                warn('saveMatchResult: eventId no disponible');
+                return null;
+            }
+            return '/api/events/' + eventId + '/results/match';
+        },
+        canExportResults: function() {
+            return !!eventId && isModular;
+        },
+        getResults: function() {
+            if (!eventId) return null;
+            return '/api/events/' + eventId + '/results';
+        }
+    };
+    Object.freeze(endpoints);
 
     // ============================================================
     // 6. REGISTRY
@@ -476,6 +513,7 @@
         isModular: isModular,
         channels: channels,
         storageKeys: storageKeys,
+        endpoints: endpoints,
 
         // 1. Config reactiva expuesta
         config: runtimeConfig,

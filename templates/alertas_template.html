@@ -524,44 +524,75 @@
         const FALLBACK_LOGO = '/shared/assets/default_logo.png';
 
         async function loadEventConfig() {
-            try {
-                const res = await fetch(`/eventos/${SAFE_EVENT_NAME}/event_config.json`);
-                if (!res.ok) throw new Error('No se pudo cargar event_config.json');
-                window.eventConfig = await res.json();
-                console.log('[Alertas] event_config.json cargado');
-            } catch (err) {
-                console.warn('[Alertas] event_config.json no disponible, usando configuración por defecto.');
-                window.eventConfig = { teams: [] };
-            }
+    const possiblePaths = [
+        './event_config.json',
+        `/eventos/${SAFE_EVENT_NAME}/event_config.json`
+    ];
+
+    for (const path of possiblePaths) {
+        try {
+            const res = await fetch(path, { cache: 'no-cache' });
+            if (!res.ok) continue;
+            window.eventConfig = await res.json();
+            console.log('[Alertas] event_config.json cargado:', path);
             await precacheTeamLogos();
-        }
+            return;
+        } catch (err) {}
+    }
+
+    console.warn('[Alertas] event_config.json no disponible, usando configuración por defecto.');
+    window.eventConfig = { teams: [] };
+    await precacheTeamLogos();
+}
 
         async function precacheTeamLogos() {
-            const teams = window.eventConfig?.teams || [];
-            for (const team of teams) {
-                const teamId = team.teamId;
-                if (!teamId) continue;
-                let logoPath = FALLBACK_LOGO;
-                if (team.logoWebm) {
-                    logoPath = team.logoWebm;
-                } else if (team.logoPng) {
-                    logoPath = team.logoPng;
-                } else if (team.logo) {
-                    logoPath = team.logo;
-                } else {
-                    logoPath = DEFAULT_LOGO;
-                }
-                teamLogoCache.set(teamId, logoPath);
-            }
-            if (!teamLogoCache.has('default')) {
-                teamLogoCache.set('default', DEFAULT_LOGO);
-            }
+    const teams = window.eventConfig?.teams || [];
+
+    for (const team of teams) {
+        const numericTeamId = Number(team.teamId);
+        if (isNaN(numericTeamId) || numericTeamId <= 0) continue;
+
+        let logoPath = FALLBACK_LOGO;
+
+        if (team.logoWebm) {
+            logoPath = team.logoWebm;
+        } else if (team.logoPng) {
+            logoPath = team.logoPng;
+        } else if (team.logo) {
+            logoPath = team.logo;
+        } else if (team.teamKey) {
+            logoPath = `${window.API_BASE}/logos/${team.teamKey}.png`;
+        } else {
+            logoPath = DEFAULT_LOGO;
         }
 
-        function getTeamLogoPath(teamId) {
-            if (!teamId) return teamLogoCache.get('default') || DEFAULT_LOGO;
-            return teamLogoCache.get(teamId) || teamLogoCache.get('default') || DEFAULT_LOGO;
-        }
+        teamLogoCache.set(numericTeamId, logoPath);
+        teamLogoCache.set(String(numericTeamId), logoPath);
+    }
+
+    if (!teamLogoCache.has('default')) {
+        teamLogoCache.set('default', DEFAULT_LOGO);
+    }
+}
+
+function getTeamLogoPath(teamId) {
+    if (teamId === null || teamId === undefined || teamId === '') {
+        return teamLogoCache.get('default') || DEFAULT_LOGO;
+    }
+
+    const numericTeamId = Number(teamId);
+
+    if (!isNaN(numericTeamId)) {
+        return (
+            teamLogoCache.get(numericTeamId) ||
+            teamLogoCache.get(String(numericTeamId)) ||
+            teamLogoCache.get('default') ||
+            DEFAULT_LOGO
+        );
+    }
+
+    return teamLogoCache.get(String(teamId)) || teamLogoCache.get('default') || DEFAULT_LOGO;
+}
 
         const OBSERVER_ENDPOINTS = [SNAPSHOT_ENDPOINT];
         let LAST_GOOD_SNAPSHOT = null;
@@ -946,7 +977,7 @@
                 const cmd = await response.json();
                 if (!cmd || !cmd.timestamp || cmd.timestamp <= lastCommandTimestamp) return;
                 lastCommandTimestamp = cmd.timestamp;
-                if (cmd.cmd) { console.log("[OVERLAY CMD]", cmd.cmd); handleCommand(cmd.cmd); }
+                if (cmd.cmd) { console.log("[OVERLAY CMD]", cmd.cmd); handleCommand(cmd.cmd, cmd); }
             } catch (err) {
                 console.warn("[OVERLAY CMD ERROR]", err);
             } finally {
@@ -954,7 +985,7 @@
             }
         }
 
-        function handleCommand(cmd) {
+        function handleCommand(cmd, payload = {}) {
             switch (cmd) {
                 case "firstKill": case "show_first_kill":
                     if (alertEnabled('firstKill')) { enqueueAlert('firstKillBanner', 'JugadorPrueba (TEAM3)', 5000, getTeamLogoPath('default')); firstKillShown = true; }
@@ -972,6 +1003,36 @@
                     alertQueue.length = 0; isAlertActive = false;
                     document.querySelectorAll('.banner').forEach(b => { b.classList.remove('show'); setTimeout(() => b.style.display = 'none', 400); });
                     stopCircleAnimation();
+                    break;
+                case "alert_firstKill_on":
+                    ALERT_SETTINGS.firstKill = true;
+                    break;
+                case "alert_firstKill_off":
+                    ALERT_SETTINGS.firstKill = false;
+                    break;
+                case "alert_firstGrenade_on":
+                    ALERT_SETTINGS.firstGrenade = true;
+                    break;
+                case "alert_firstGrenade_off":
+                    ALERT_SETTINGS.firstGrenade = false;
+                    break;
+                case "alert_teamEliminated_on":
+                    ALERT_SETTINGS.teamEliminated = true;
+                    break;
+                case "alert_teamEliminated_off":
+                    ALERT_SETTINGS.teamEliminated = false;
+                    break;
+                case "alert_zone_on":
+                    ALERT_SETTINGS.zone = true;
+                    break;
+                case "alert_zone_off":
+                    ALERT_SETTINGS.zone = false;
+                    stopCircleAnimation();
+                    break;
+                case "set_display_mode":
+                    displayMode = payload?.mode || payload?.displayMode || payload?.value || displayMode;
+                    displayMode = displayMode === 'individual' ? 'individual' : 'team';
+                    updateEliminationTitle();
                     break;
                 default: console.log("[OVERLAY] Comando no manejado:", cmd);
             }

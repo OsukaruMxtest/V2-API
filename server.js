@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
 const { v4: uuidv4 } = require("uuid");
-const ArchiverLib = require("archiver"); // Cambio: alias para evitar colisión
+const ArchiverLib = require("archiver");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -68,20 +68,17 @@ app.use('/tools', express.static(path.join(__dirname, 'tools')));
 // Static routes for modular architecture with cache-control for OBS
 const noStoreOptions = {
     setHeaders: (res, filePath) => {
-        // Evitar caché agresivo en OBS
         res.setHeader('Cache-Control', 'no-store');
-        // Soporte MIME explícito para .ini
         if (filePath.endsWith('.ini')) {
             res.setHeader('Content-Type', 'text/plain');
         }
-        // .webm y .json ya son manejados correctamente por express.static
     }
 };
 app.use('/overlays', express.static(path.join(__dirname, 'overlays'), noStoreOptions));
 app.use('/control', express.static(path.join(__dirname, 'overlays/control'), noStoreOptions));
 app.use('/templates', express.static(TEMPLATES_DIR, noStoreOptions));
 app.use('/shared', express.static(SHARED_DIR, noStoreOptions));
-app.use('/eventos', express.static(EVENTS_DIR)); // Sin cache-control especial para mantener compatibilidad
+app.use('/eventos', express.static(EVENTS_DIR, noStoreOptions));
 
 // ============================================
 // FUNCIONES TEAM MANAGER
@@ -742,6 +739,20 @@ function mergeKills(snapshot) {
     if (killHistory.length > MAX_KILLS) killHistory.splice(0, killHistory.length - MAX_KILLS);
 }
 
+function countMolotovKillsByTeam(killHistory, uidToTeamMap) {
+    const result = {};
+    const kills = killHistory || [];
+    for (const k of kills) {
+        if (String(k.ItemID) !== '602003') continue;
+        if (String(k.ResultHealthStatus) !== '2') continue;
+        const causerUid = String(k.CauserUID || '');
+        const teamId = uidToTeamMap.get(causerUid);
+        if (!teamId) continue;
+        result[teamId] = (result[teamId] || 0) + 1;
+    }
+    return result;
+}
+
 function buildSnapshot() {
     if (isGameLocked()) {
         if (matchFinishedTime > 0) {
@@ -777,25 +788,37 @@ function buildSnapshot() {
     matchStats.players = {};
     matchStats.teams = {};
     const players = base?.allinfo?.TotalPlayerList || [];
+    const uidToTeamMap = new Map();
     for (const p of players) {
-        const team = p.TeamID;
-        const grenadeKills = Number(p.killNumByGrenade || 0);
-        const vehicleKills = Number(p.killNumInVehicle || 0);
-        const molotovKills = Number(p.killNumByMolotov || 0);
-        const longestKill = Number(p.maxKillDistance || 0);
-        const runDistance = Number(p.marchDistance || 0);
-        const blueTime = Number(p.outsideBlueCircleTime || 0);
+        const uid = String(p.uId ?? p.UID ?? '');
+        const team = p.teamId ?? p.TeamID ?? '';
+        if (uid && team) uidToTeamMap.set(uid, team);
+    }
+    const molotovKillsByTeam = countMolotovKillsByTeam(killHistory, uidToTeamMap);
+    for (const p of players) {
+        const team = p.teamId ?? p.TeamID ?? '';
+        if (!team) continue;
+        const grenadeKills = Number(p.killNumByGrenade ?? p.KillNumByGrenade ?? 0);
+        const vehicleKills = Number(p.killNumInVehicle ?? p.KillNumInVehicle ?? 0);
+        const longestKill = Number(p.maxKillDistance ?? p.MaxKillDistance ?? 0);
+        const runDistance = Number(p.marchDistance ?? p.MarchDistance ?? 0);
+        const blueTime = Number(p.outsideBlueCircleTime ?? p.OutsideBlueCircleTime ?? 0);
         matchStats.grenadeKills[team] = (matchStats.grenadeKills[team] || 0) + grenadeKills;
         matchStats.vehicleKills[team] = (matchStats.vehicleKills[team] || 0) + vehicleKills;
-        matchStats.molotovKills[team] = (matchStats.molotovKills[team] || 0) + molotovKills;
         if (longestKill > matchStats.longestKill.distance) matchStats.longestKill = { distance: longestKill, team };
         if (runDistance > matchStats.longestRun.distance) matchStats.longestRun = { distance: runDistance, team };
         if (blueTime > matchStats.longestBlueZone.time) matchStats.longestBlueZone = { time: blueTime, team };
-        matchStats.players[p.UID] = { name: p.PlayerName, team, kills: Number(p.KillNum || 0), damage: Number(p.Damage || 0), rank: Number(p.Rank || 99) };
-        if (!matchStats.teams[team]) matchStats.teams[team] = { kills: 0, damage: 0, rank: 99 };
-        matchStats.teams[team].kills += Number(p.KillNum || 0);
-        matchStats.teams[team].damage += Number(p.Damage || 0);
-        if (p.Rank < matchStats.teams[team].rank) matchStats.teams[team].rank = p.Rank;
+        const uid = String(p.uId ?? p.UID ?? '');
+        const playerName = p.playerName ?? p.PlayerName ?? '';
+        matchStats.players[uid] = { name: playerName, team, kills: Number(p.killNum ?? p.KillNum ?? 0), damage: Number(p.damage ?? p.Damage ?? 0), rank: Number(p.rank ?? p.Rank ?? 99) };
+        if (!matchStats.teams[team]) {
+            matchStats.teams[team] = { kills: 0, damage: 0, rank: 99 };
+            matchStats.molotovKills[team] = molotovKillsByTeam[team] || 0;
+        }
+        matchStats.teams[team].kills += Number(p.killNum ?? p.KillNum ?? 0);
+        matchStats.teams[team].damage += Number(p.damage ?? p.Damage ?? 0);
+        const playerRank = Number(p.rank ?? p.Rank ?? 99);
+        if (playerRank < matchStats.teams[team].rank) matchStats.teams[team].rank = playerRank;
     }
     const gameID = base.GameID || base?.allinfo?.GameID || null;
     masterSnapshot = {
@@ -861,10 +884,8 @@ function processMatchResults(snapshot) {
         else t.pp = 1;
         t.total = t.pp + t.pe;
     });
-    if (tournamentConfig.autoMatchIncrement) {
-        tournamentConfig.match += 1;
-        saveJSON(CONFIG_FILE, tournamentConfig);
-    }
+    // El incremento automático de match se maneja desde final_template / results API
+    // para evitar dobles incrementos cuando se usa el flujo oficial de resultados por evento.
 }
 
 // ============================================
@@ -1137,15 +1158,11 @@ app.get('/', (req, res) => {
 //  NUEVAS FUNCIONES PARA GENERACIÓN DE EVENT PACKAGES
 // ============================================
 
-/**
- * Sanitiza el nombre del evento para usar como nombre de carpeta/archivo.
- * Elimina caracteres peligrosos y reemplaza espacios por guiones bajos.
- */
 function sanitizeEventName(name) {
     return name
         .trim()
-        .replace(/[<>:"/\\|?*]+/g, '')   // Quitar caracteres no válidos en Windows/Linux
-        .replace(/\s+/g, '_');           // Espacios -> guiones bajos
+        .replace(/[<>:"/\\|?*]+/g, '')
+        .replace(/\s+/g, '_');
 }
 
 function loadTemplate(templateName) {
@@ -1168,7 +1185,7 @@ function renderTemplate(template, replacements) {
 }
 
 function buildEventConfig(data) {
-    const { eventName, eventDate, teams } = data;
+    const { eventName, eventDate, teams, slots } = data;
 
     const config = {
         eventName,
@@ -1179,16 +1196,36 @@ function buildEventConfig(data) {
 
     if (Array.isArray(teams)) {
         config.teams = teams.map(team => {
-            const numericTeamId = Number(team.teamId);
-
             const teamKey =
                 team.teamKey ||
                 team.teamManagerId ||
                 team.logoKey ||
                 (/^T-\d{4}$/i.test(String(team.teamId || '')) ? String(team.teamId) : '');
 
+            let numericTeamId = Number(team.teamId);
+
+            if ((isNaN(numericTeamId) || numericTeamId <= 0) && Array.isArray(slots)) {
+                const slotMatch = slots.find(slot => {
+                    const slotTeamKey =
+                        slot.teamKey ||
+                        slot.teamManagerId ||
+                        slot.logoKey ||
+                        (/^T-\d{4}$/i.test(String(slot.teamId || '')) ? String(slot.teamId) : '');
+
+                    return String(slotTeamKey) === String(teamKey);
+                });
+
+                if (slotMatch) {
+                    numericTeamId =
+                        Number(slotMatch.teamId) ||
+                        Number(slotMatch.slot) ||
+                        Number(slotMatch.teamNo) ||
+                        Number(slotMatch.pubgTeamId);
+                }
+            }
+
             return {
-                teamId: !isNaN(numericTeamId) ? numericTeamId : '',
+                teamId: !isNaN(numericTeamId) && numericTeamId > 0 ? numericTeamId : '',
                 teamKey: teamKey,
                 teamName: team.teamName || '',
                 logoPng: team.logoPng || '',
@@ -1224,12 +1261,6 @@ function buildConfigJS(data) {
     ].join('\n');
 }
 
-/**
- * NOTA: Esta función utiliza placeholders TEAM_X_... que están pensados
- * para overlays que aún no son completamente dinámicos. En el futuro,
- * los overlays cargarán event_config.json en runtime y estos placeholders
- * desaparecerán, junto con este sistema de reemplazo.
- */
 function buildOverlayReplacements(data, slots) {
     const replacements = {
         EVENT_NAME: data.eventName,
@@ -1240,7 +1271,10 @@ function buildOverlayReplacements(data, slots) {
         const teamsArray = data.teams || [];
         slots.forEach((slot, index) => {
             const pos = index + 1;
-            const team = teamsArray.find(t => Number(t.teamId) === Number(slot.teamId));
+            const team = teamsArray.find(t =>
+                Number(t.teamId) === Number(slot.teamId) ||
+                String(t.teamKey || t.teamId) === String(slot.teamKey || slot.teamId)
+            );
             if (team) {
                 replacements[`TEAM_${pos}_NAME`] = team.teamName || '';
                 replacements[`TEAM_${pos}_TAG`] = team.tag || '';
@@ -1269,8 +1303,11 @@ async function generateEventPackage(data) {
     const resultadosDir = path.join(eventDir, 'resultados');
     if (!fs.existsSync(assetsDir)) fs.mkdirSync(assetsDir, { recursive: true });
     if (!fs.existsSync(resultadosDir)) fs.mkdirSync(resultadosDir, { recursive: true });
+    fs.mkdirSync(path.join(resultadosDir, 'matches'), { recursive: true });
+    fs.mkdirSync(path.join(resultadosDir, 'csv'), { recursive: true });
 
     const configJson = buildEventConfig(data);
+    console.log('[EVENT PACKAGE SERVER] generated config teams:', configJson.teams);
     fs.writeFileSync(
         path.join(eventDir, 'event_config.json'),
         JSON.stringify(configJson, null, 2),
@@ -1300,17 +1337,14 @@ async function generateEventPackage(data) {
             fs.writeFileSync(path.join(eventDir, ov.output), rendered, 'utf8');
         } catch (err) {
             console.error(`[EVENT PACKAGE] Error generando ${ov.output}:`, err.message);
-            // Continuamos con los demás overlays en lugar de romper el ZIP
         }
     }
 
-    console.log("[ARCHIVER TYPE]", typeof ArchiverLib); // Debug temporal
     const archive = ArchiverLib('zip', { zlib: { level: 9 } });
     archive.on('error', err => {
         throw err;
     });
     archive.directory(eventDir, safeEventName);
-    // No llamamos a finalize aquí; se hará en el endpoint después de pipe
     return archive;
 }
 
@@ -1331,6 +1365,9 @@ app.post('/api/generate-event-package', async (req, res) => {
             return res.status(400).json({ success: false, error: 'teams debe ser un array' });
         }
 
+        console.log('[EVENT PACKAGE SERVER] received slots:', slots);
+        console.log('[EVENT PACKAGE SERVER] received teams:', teams);
+
         const data = { eventName, eventDate, slots, teams };
 
         const archiveStream = await generateEventPackage(data);
@@ -1345,6 +1382,344 @@ app.post('/api/generate-event-package', async (req, res) => {
         if (!res.headersSent) {
             res.status(500).json({ success: false, error: err.message || 'Error interno' });
         }
+    }
+});
+
+// ============================================
+// RESULTADOS POR EVENTO
+// ============================================
+
+function resolveEventPath(eventName) {
+    const safeName = sanitizeEventName(eventName);
+    const eventDir = path.join(EVENTS_DIR, safeName);
+    const resolved = path.resolve(eventDir);
+    const resolvedEvents = path.resolve(EVENTS_DIR);
+    if (!resolved.startsWith(resolvedEvents)) {
+        throw new Error('Nombre de evento invalido');
+    }
+    return resolved;
+}
+
+function ensureResultDirs(eventDir) {
+    const resultadosDir = path.join(eventDir, 'resultados');
+    const matchesDir = path.join(resultadosDir, 'matches');
+    const csvDir = path.join(resultadosDir, 'csv');
+    if (!fs.existsSync(resultadosDir)) fs.mkdirSync(resultadosDir, { recursive: true });
+    if (!fs.existsSync(matchesDir)) fs.mkdirSync(matchesDir, { recursive: true });
+    if (!fs.existsSync(csvDir)) fs.mkdirSync(csvDir, { recursive: true });
+    return { resultadosDir, matchesDir, csvDir };
+}
+
+function getNextMatchNumber(matchesDir) {
+    if (!fs.existsSync(matchesDir)) return 1;
+    const files = fs.readdirSync(matchesDir).filter(f => /^M\d+\.json$/.test(f));
+    const nums = files.map(f => parseInt(f.replace(/\D/g, ''), 10)).filter(n => !isNaN(n));
+    return nums.length > 0 ? Math.max(...nums) + 1 : 1;
+}
+
+function isDuplicateGameID(matchesDir, gameID) {
+    if (!gameID) return false;
+    if (!fs.existsSync(matchesDir)) return false;
+    const files = fs.readdirSync(matchesDir).filter(f => f.endsWith('.json'));
+    for (const f of files) {
+        try {
+            const data = JSON.parse(fs.readFileSync(path.join(matchesDir, f), 'utf8'));
+            const savedGameID = data.GameID || data.gameID || data.gameId || data.gameIdRaw;
+            if (String(savedGameID) === String(gameID)) return true;
+        } catch (e) { /* skip */ }
+    }
+    return false;
+}
+
+function escapeCsv(value) {
+    const str = String(value ?? '');
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return '"' + str.replace(/"/g, '""') + '"';
+    }
+    return str;
+}
+
+function buildPlayersCsv(players, matchNumber, gameID, gameStartTime, finishedStartTime) {
+    const exportedAt = new Date().toISOString();
+    const headers = ['Match', 'GameID', 'GameStartTime', 'FinishedStartTime', 'ExportedAt', 'TeamID', 'TeamKey', 'TeamName', 'PlayerName', 'UID', 'Kills', 'Damage', 'Rank', 'SurvivalTime', 'Assists', 'Knocks', 'Headshots', 'MaxKillDistance', 'VehicleKills', 'GrenadeKills'];
+    const rows = players.map(p => [
+        matchNumber,
+        gameID ?? '',
+        gameStartTime ?? '',
+        finishedStartTime ?? '',
+        exportedAt,
+        p.teamId ?? p.TeamID ?? '',
+        p.teamKey ?? p.TeamKey ?? '',
+        p.teamName ?? p.TeamName ?? '',
+        p.playerName ?? p.PlayerName ?? p.name ?? '',
+        p.uId ?? p.UID ?? p.uid ?? '',
+        p.killNum ?? p.KillNum ?? p.kills ?? 0,
+        p.damage ?? p.Damage ?? 0,
+        p.rank ?? p.Rank ?? 99,
+        p.survivalTime ?? p.SurvivalTime ?? 0,
+        p.assists ?? p.Assists ?? 0,
+        p.knockouts ?? p.Knockouts ?? p.KnockNum ?? p.knockNum ?? 0,
+        p.headShotNum ?? p.HeadShotNum ?? p.headshots ?? 0,
+        p.maxKillDistance ?? p.MaxKillDistance ?? 0,
+        p.killNumInVehicle ?? p.KillNumInVehicle ?? 0,
+        p.killNumByGrenade ?? p.KillNumByGrenade ?? 0
+    ].map(escapeCsv).join(','));
+    return '\uFEFF' + headers.join(',') + '\n' + rows.join('\n');
+}
+
+function buildTeamsCsv(teams, matchNumber) {
+    const headers = ['Match', 'TeamID', 'TeamKey', 'TeamName', 'Kills', 'Damage', 'Rank', 'PP', 'PE', 'Total'];
+    const rows = teams.map(t => [
+        matchNumber,
+        t.teamId ?? t.TeamID ?? '',
+        t.teamKey ?? t.TeamKey ?? '',
+        t.teamName ?? t.TeamName ?? '',
+        t.totalKills ?? t.kills ?? t.killNum ?? t.KillNum ?? 0,
+        t.totalDamage ?? t.damage ?? t.Damage ?? 0,
+        t.rank ?? t.Rank ?? 99,
+        t.pp ?? t.PP ?? 0,
+        t.pe ?? t.PE ?? t.killNum ?? t.KillNum ?? t.kills ?? 0,
+        t.total ?? t.Total ?? t.totalPoints ?? t.TotalPoints ?? 0
+    ].map(escapeCsv).join(','));
+    return '\uFEFF' + headers.join(',') + '\n' + rows.join('\n');
+}
+
+function buildTablaGeneralCsv(teams) {
+    const headers = ['Pos', 'TeamID', 'TeamKey', 'TeamName', 'PJ', 'Total', 'WWCD', 'PP', 'PE', 'Elims', 'Damage', 'MejorPos', 'UltimaPos'];
+    const rows = teams.map((t, i) => [
+        i + 1,
+        t.teamId ?? '',
+        t.teamKey ?? '',
+        t.teamName ?? '',
+        t.partidasJugadas ?? 0,
+        t.total ?? 0,
+        t.wwcd ?? 0,
+        t.pp ?? 0,
+        t.pe ?? 0,
+        t.kills ?? 0,
+        t.damage ?? 0,
+        t.mejorPosicion ?? 99,
+        t.ultimaPosicion ?? 99
+    ].map(escapeCsv).join(','));
+    return '\uFEFF' + headers.join(',') + '\n' + rows.join('\n');
+}
+
+function updateAcumulado(acumuladoPath, matchData, matchNumber) {
+    let acumulado = loadJSON(acumuladoPath, { teams: [] });
+    if (!acumulado.teams) acumulado.teams = [];
+
+    const teamsMap = new Map();
+    for (const t of acumulado.teams) {
+        teamsMap.set(String(t.teamId), t);
+    }
+
+    for (const team of matchData.teams || []) {
+        const teamId = team.teamId ?? team.TeamID ?? '';
+        if (!teamId) continue;
+        const teamKey = team.teamKey ?? team.TeamKey ?? '';
+        const teamName = team.teamName ?? team.TeamName ?? '';
+        const rank = Number(team.rank ?? team.Rank ?? 99);
+        const pp = Number(team.pp ?? team.PP ?? 0);
+        const pe = Number(team.pe ?? team.PE ?? team.killNum ?? team.KillNum ?? 0);
+        const bonusTotal = Number(team.bonusTotal ?? team.BonusTotal ?? team.bonus ?? 0);
+        const kills = Number(team.totalKills ?? team.kills ?? team.killNum ?? team.KillNum ?? 0);
+        const damage = Number(team.totalDamage ?? team.damage ?? team.Damage ?? 0);
+
+        let total = Number(team.total ?? team.Total ?? team.totalPoints ?? team.TotalPoints ?? 0);
+        if ((!team.total && !team.Total && !team.totalPoints && !team.TotalPoints) || total === 0) {
+            total = pp + pe + bonusTotal;
+        }
+
+        const id = String(teamId);
+        let existing = teamsMap.get(id);
+        if (!existing) {
+            existing = {
+                teamId: teamId,
+                teamKey: teamKey,
+                teamName: teamName,
+                partidasJugadas: 0,
+                total: 0,
+                wwcd: 0,
+                pp: 0,
+                pe: 0,
+                bonusTotal: 0,
+                kills: 0,
+                damage: 0,
+                mejorPosicion: 99,
+                ultimaPosicion: 99
+            };
+            teamsMap.set(id, existing);
+            acumulado.teams.push(existing);
+        }
+        existing.partidasJugadas += 1;
+        existing.total += total;
+        existing.pp += pp;
+        existing.pe += pe;
+        existing.bonusTotal += bonusTotal;
+        existing.kills += kills;
+        existing.damage += damage;
+        existing.ultimaPosicion = rank;
+        if (rank === 1) existing.wwcd += 1;
+        if (rank < existing.mejorPosicion) existing.mejorPosicion = rank;
+    }
+
+    acumulado.teams.sort((a, b) => {
+        if (b.total !== a.total) return b.total - a.total;
+        if (b.wwcd !== a.wwcd) return b.wwcd - a.wwcd;
+        if (b.pp !== a.pp) return b.pp - a.pp;
+        if (b.pe !== a.pe) return b.pe - a.pe;
+        return a.ultimaPosicion - b.ultimaPosicion;
+    });
+
+    acumulado.lastUpdated = new Date().toISOString();
+    acumulado.lastMatch = matchNumber;
+    saveJSON(acumuladoPath, acumulado);
+    return acumulado;
+}
+
+function appendPosicionesCsv(csvPath, rows, matchNumber) {
+    const lines = rows.map(r => [
+        matchNumber,
+        r.teamId ?? r.TeamID ?? '',
+        r.teamKey ?? r.TeamKey ?? '',
+        r.teamName ?? r.TeamName ?? '',
+        r.rank ?? r.Rank ?? 99,
+        r.pp ?? r.PP ?? 0,
+        r.pe ?? r.PE ?? r.killNum ?? r.KillNum ?? 0,
+        r.total ?? r.Total ?? r.totalPoints ?? r.TotalPoints ?? 0
+    ].map(escapeCsv).join(','));
+    if (!fs.existsSync(csvPath)) {
+        fs.writeFileSync(csvPath, '\uFEFF' + 'Match,TeamID,TeamKey,TeamName,Rank,PP,PE,Total\n' + lines.join('\n'), 'utf8');
+    } else {
+        fs.appendFileSync(csvPath, '\n' + lines.join('\n'), 'utf8');
+    }
+}
+
+// POST /api/events/:eventName/results/match
+app.post('/api/events/:eventName/results/match', (req, res) => {
+    try {
+        const eventName = req.params.eventName;
+        if (!eventName || typeof eventName !== 'string') {
+            return res.status(400).json({ success: false, error: 'eventName invalido' });
+        }
+
+        const eventDir = resolveEventPath(eventName);
+        if (!fs.existsSync(eventDir)) {
+            return res.status(404).json({ success: false, error: 'Evento no encontrado' });
+        }
+
+        const { matchesDir, csvDir, resultadosDir } = ensureResultDirs(eventDir);
+        const payload = req.body;
+
+        if (!payload || typeof payload !== 'object') {
+            return res.status(400).json({ success: false, error: 'Payload invalido' });
+        }
+
+        const gameID = payload.GameID || payload.gameID || payload.gameId || null;
+        if (gameID && isDuplicateGameID(matchesDir, gameID)) {
+            return res.status(409).json({ success: false, error: 'GameID ya registrado' });
+        }
+
+        let matchNumber = payload.matchNumber ? parseInt(payload.matchNumber, 10) : null;
+        if (!matchNumber || isNaN(matchNumber) || matchNumber < 1) {
+            matchNumber = getNextMatchNumber(matchesDir);
+        }
+
+        const matchKey = 'M' + matchNumber;
+        const matchFile = path.join(matchesDir, matchKey + '.json');
+        const playersCsvFile = path.join(csvDir, matchKey + '_jugadores.csv');
+        const teamsCsvFile = path.join(csvDir, matchKey + '_equipos.csv');
+        const posicionesCsvFile = path.join(csvDir, 'posiciones_por_partida.csv');
+        const acumuladoPath = path.join(resultadosDir, 'acumulado.json');
+        const tablaCsvFile = path.join(csvDir, 'tabla_general.csv');
+
+        const matchData = {
+            ...payload,
+            matchNumber,
+            matchKey,
+            savedAt: new Date().toISOString()
+        };
+        fs.writeFileSync(matchFile, JSON.stringify(matchData, null, 2), 'utf8');
+
+        const players = payload.players || payload.allinfo?.TotalPlayerList || [];
+        const teams = payload.teams || [];
+
+        const gameStartTime = payload.GameStartTime || payload.gameStartTime || '';
+        const finishedStartTime = payload.FinishedStartTime || payload.finishedStartTime || '';
+        fs.writeFileSync(playersCsvFile, buildPlayersCsv(players, matchNumber, gameID, gameStartTime, finishedStartTime), 'utf8');
+        fs.writeFileSync(teamsCsvFile, buildTeamsCsv(teams, matchNumber), 'utf8');
+
+        appendPosicionesCsv(posicionesCsvFile, teams, matchNumber);
+
+        const acumulado = updateAcumulado(acumuladoPath, matchData, matchNumber);
+
+        fs.writeFileSync(tablaCsvFile, buildTablaGeneralCsv(acumulado.teams), 'utf8');
+
+        res.json({
+            success: true,
+            matchKey,
+            matchNumber,
+            gameID,
+            files: {
+                match: matchFile,
+                playersCsv: playersCsvFile,
+                teamsCsv: teamsCsvFile,
+                posicionesCsv: posicionesCsvFile,
+                acumulado: acumuladoPath,
+                tablaGeneral: tablaCsvFile
+            }
+        });
+    } catch (err) {
+        console.error('[RESULTS ERROR]', err);
+        res.status(500).json({ success: false, error: err.message || 'Error interno' });
+    }
+});
+
+// GET /api/events/:eventName/results
+app.get('/api/events/:eventName/results', (req, res) => {
+    try {
+        const eventName = req.params.eventName;
+        if (!eventName || typeof eventName !== 'string') {
+            return res.status(400).json({ success: false, error: 'eventName invalido' });
+        }
+
+        const eventDir = resolveEventPath(eventName);
+        if (!fs.existsSync(eventDir)) {
+            return res.status(404).json({ success: false, error: 'Evento no encontrado' });
+        }
+
+        const resultadosDir = path.join(eventDir, 'resultados');
+        const matchesDir = path.join(resultadosDir, 'matches');
+        const csvDir = path.join(resultadosDir, 'csv');
+        const acumuladoPath = path.join(resultadosDir, 'acumulado.json');
+
+        const matches = [];
+        if (fs.existsSync(matchesDir)) {
+            const files = fs.readdirSync(matchesDir).filter(f => f.endsWith('.json')).sort();
+            for (const f of files) {
+                try {
+                    const data = JSON.parse(fs.readFileSync(path.join(matchesDir, f), 'utf8'));
+                    matches.push({ file: f, matchNumber: data.matchNumber, gameID: data.GameID || data.gameID || data.gameId, savedAt: data.savedAt });
+                } catch (e) { /* skip */ }
+            }
+        }
+
+        const acumulado = fs.existsSync(acumuladoPath) ? JSON.parse(fs.readFileSync(acumuladoPath, 'utf8')) : null;
+
+        res.json({
+            success: true,
+            eventName,
+            matches,
+            matchCount: matches.length,
+            acumulado: acumulado ? {
+                teamCount: acumulado.teams?.length || 0,
+                lastUpdated: acumulado.lastUpdated,
+                lastMatch: acumulado.lastMatch
+            } : null
+        });
+    } catch (err) {
+        console.error('[RESULTS GET ERROR]', err);
+        res.status(500).json({ success: false, error: err.message || 'Error interno' });
     }
 });
 
